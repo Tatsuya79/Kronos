@@ -415,7 +415,7 @@ typedef struct {
    int (*setupUniform)(void *, YglTextureManager *tm, Vdp2* regs);
    int (*cleanupUniform)(void *, YglTextureManager *tm);
    YglVdp1CommonParam * ids;
-   float * matrix;
+   GLfloat* matrix;
    int mosaic[2];
    u32 lineTexture;
    int id;
@@ -456,6 +456,8 @@ typedef enum
 	RES_ORIGINAL = 1,
         RES_2x = 2,
         RES_4x = 4,
+        RES_8x = 8,
+        RES_16x = 16,
 } RESOLUTION_MODE;
 
 typedef enum
@@ -584,7 +586,6 @@ typedef struct {
    YglPerLineInfo bg[enBGMAX];
    u32 targetfbo;
    int vpd1_running;
-   int needVdp1Render;
    GLint m_viewport[4];
 
    GLuint cram_tex;

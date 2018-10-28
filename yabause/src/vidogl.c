@@ -47,7 +47,7 @@
 
 #define LOG_AREA
 
-static bool vidogl_renderer_started = false;
+static int vidogl_renderer_started = 0;
 static Vdp2 baseVdp2Regs;
 //#define PERFRAME_LOG
 #ifdef PERFRAME_LOG
@@ -223,6 +223,7 @@ typedef struct {
 #ifdef RGB_ASYNC
 YabEventQueue *rotq = NULL;
 YabEventQueue *rotq_end = NULL;
+YabEventQueue *rotq_end_task = NULL;
 static int rotation_run = 0;
 #endif
 
@@ -337,13 +338,15 @@ static void requestDrawCellOrder(vdp2draw_struct * info, YglTexture *texture, Vd
 
 static void executeDrawCell() {
 #ifdef CELL_ASYNC
-  while (nbLoop != 0) {
-    nbLoop--;
-    Vdp2DrawCell(infoTable[nbLoop], textureTable[nbLoop], vdp2RegsTable[nbLoop], orderTable[nbLoop]);
-    free(infoTable[nbLoop]);
-    free(textureTable[nbLoop]);
-    free(vdp2RegsTable[nbLoop]);
+  int i = 0;
+  while (i < nbLoop) {
+    Vdp2DrawCell(infoTable[i], textureTable[i], vdp2RegsTable[i], orderTable[i]);
+    free(infoTable[i]);
+    free(textureTable[i]);
+    free(vdp2RegsTable[i]);
+    i++;
   }
+  nbLoop = 0;
 #endif
 }
 
@@ -3356,8 +3359,22 @@ static void FASTCALL Vdp2DrawRotation(RBGDrawInfo * rbg, Vdp2 *varVdp2Regs)
   if (rgb_type == 0x0) Vdp2DrawRotation_in(rbg, varVdp2Regs);
   else 
 #endif
+  {
     Vdp2DrawRotation_in_sync(rbg, varVdp2Regs);
+    YglQuadRbg0(&rbg->info, NULL, &rbg->c, &rbg->cline, YglTM_vdp2);
+  }
 }
+
+#ifdef RGB_ASYNC
+static void finishRbgQueue() {
+  while (YaGetQueueSize(rotq_end_task)!=0)
+  {
+    RBGDrawInfo *rbg = (RBGDrawInfo *) YabWaitEventQueue(rotq_end_task);
+    YglQuadRbg0(&rbg->info, NULL, &rbg->c, &rbg->cline, YglTM_vdp2);
+    free(rbg);
+  }
+}
+#endif
 
 #define ceilf(a) ((a)+0.99999f)
 
@@ -3579,7 +3596,7 @@ static void Vdp2DrawRotation_in_sync(RBGDrawInfo * rbg, Vdp2 *varVdp2Regs) {
         }
         break;
       default:
-        parameter = info->GetRParam(rbg, i, j);
+        parameter = info->GetRParam(rbg, i, j, varVdp2Regs);
         break;
       }
       if (parameter == NULL)
@@ -3809,9 +3826,6 @@ static void Vdp2DrawRotation_in_sync(RBGDrawInfo * rbg, Vdp2 *varVdp2Regs) {
     rbg->info.flipfunction = 0;
 
     LOG_AREA("%d %d %d\n", rbg->info.cellw, rbg->info.cellh, rbg->info.celly);
-
-    YglQuadRbg0(&rbg->info, NULL, &rbg->c, &rbg->cline, YglTM_vdp2);
-    free(rbg);
   }
 
 #ifdef RGB_ASYNC
@@ -3821,6 +3835,8 @@ void Vdp2DrawRotation_in_async(void *p)
      rotationTask *task = (rotationTask *)YabWaitEventQueue(rotq);
      if (task != NULL) {
        Vdp2DrawRotation_in_sync(task->rbg, task->varVdp2Regs);
+       YabAddEventQueue(rotq_end_task, task->rbg);
+       free(task->varVdp2Regs);
        free(task);
      }
      YabWaitEventQueue(rotq_end);
@@ -3829,12 +3845,18 @@ void Vdp2DrawRotation_in_async(void *p)
 
 static void Vdp2DrawRotation_in(RBGDrawInfo * rbg, Vdp2 *varVdp2Regs) {
    rotationTask *task = malloc(sizeof(rotationTask));
-   task->rbg = rbg;
-   task->varVdp2Regs = varVdp2Regs;
+
+   task->rbg = malloc(sizeof(RBGDrawInfo));
+   memcpy(task->rbg, rbg, sizeof(RBGDrawInfo));
+
+   task->varVdp2Regs = malloc(sizeof(Vdp2));
+   memcpy(task->varVdp2Regs, varVdp2Regs, sizeof(Vdp2));
+
    if (rotation_run == 0) {
      rotation_run = 1;
      rotq = YabThreadCreateQueue(32);
      rotq_end = YabThreadCreateQueue(32);
+     rotq_end_task = YabThreadCreateQueue(32);
      YabThreadStart(YAB_THREAD_VDP2_RBG1, Vdp2DrawRotation_in_async, 0);
    }
    YabAddEventQueue(rotq_end, NULL);
@@ -3878,7 +3900,7 @@ int VIDOGLInit(void)
   vdp1wratio = 1;
   vdp1hratio = 1;
 
-  vidogl_renderer_started = true;
+  vidogl_renderer_started = 1;
 
   return 0;
 }
@@ -3918,7 +3940,7 @@ void VIDOGLDeInit(void)
     deinitPatternCache();
   }
 #endif
-  vidogl_renderer_started = false;
+  vidogl_renderer_started = 0;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -3994,7 +4016,6 @@ void VIDOGLVdp1Draw()
 
   FrameProfileAdd("Vdp1Command start");
 
-  _Ygl->needVdp1Render = 1;
   YglTmPull(YglTM_vdp1[_Ygl->drawframe], 0);
 
   maxpri = 0x00;
@@ -5484,6 +5505,9 @@ void VIDOGLVdp1LocalCoordinate(u8 * ram, Vdp1 * regs)
 {
   Vdp1Regs->localX = T1ReadWord(Vdp1Ram, Vdp1Regs->addr + 0xC);
   Vdp1Regs->localY = T1ReadWord(Vdp1Ram, Vdp1Regs->addr + 0xE);
+
+  if ((Vdp1Regs->localX & 0x400)) Vdp1Regs->localX |= 0xFC00; else Vdp1Regs->localX &= ~(0xFC00);
+  if ((Vdp1Regs->localY & 0x400)) Vdp1Regs->localY |= 0xFC00; else Vdp1Regs->localY &= ~(0xFC00);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -5508,8 +5532,6 @@ void VIDOGLVdp2Draw(void)
     YglTM_vdp2 = YglTMInit(new_width, new_height);
   }
   YglTmPull(YglTM_vdp2, 0);
-  YglTMReset(YglTM_vdp2);
-  YglCacheReset(YglTM_vdp2);
 
   if (Vdp2Regs->TVMD & 0x8000) {
     VIDOGLVdp2DrawScreens();
@@ -5966,8 +5988,9 @@ static void Vdp2DrawRBG1_part(RBGDrawInfo *rgb, Vdp2* varVdp2Regs)
   else
     info->isverticalscroll = 0;
 
-    // RBG1 draw
-    Vdp2DrawRotation(rgb, varVdp2Regs);
+  // RBG1 draw
+  Vdp2DrawRotation(rgb, varVdp2Regs);
+  free(rgb);
 }
 
 int sameVDP2RegRBG0(Vdp2 *a, Vdp2 *b)
@@ -7245,6 +7268,7 @@ static void Vdp2DrawRBG0_part( RBGDrawInfo *rgb, Vdp2* varVdp2Regs)
   Vdp2SetGetColor(info);
 
   Vdp2DrawRotation(rgb, varVdp2Regs);
+  free(rgb);
 }
 
 
@@ -7339,6 +7363,7 @@ int WaitVdp2Async(int sync) {
       {
         YabThreadYield();
       }
+      finishRbgQueue();
       if (empty != 0) return empty;
     }
 #endif

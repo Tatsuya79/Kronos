@@ -29,7 +29,7 @@
 #include "bicubic_shader.h"
 #include "scanline_shader.h"
 
-#define YGLLOG
+//#define YGLLOG
 
 int Ygl_useTmpBuffer();
 int YglBlitBlur(u32 srcTexture, u32 targetFbo, float w, float h, float * matrix);
@@ -108,7 +108,7 @@ int ShaderDrawTest()
   glEnableVertexAttribArray(vertexp);
   glEnableVertexAttribArray(texcoordp);
 
-  glUniformMatrix4fv(mtxModelView, 1, GL_FALSE, (GLfloat*)&_Ygl->mtxModelView/*mtx*/.m[0][0]);
+  glUniformMatrix4fv(mtxModelView, 1, GL_FALSE, (GLfloat*)&_Ygl->mtxModelView.m[0][0]);
 
   glVertexAttribPointer(vertexp, 3, GL_FLOAT, GL_FALSE, 0, (const GLvoid*)vec);
   glVertexAttribPointer(texcoordp, 2, GL_FLOAT, GL_FALSE, 0, (const GLvoid*)tex);
@@ -192,11 +192,7 @@ int Ygl_cleanupVdp1CommonParam(void * p, YglTextureManager *tm){
  *  Normal Draw
  * ----------------------------------------------------------------------------------*/
 const GLchar Yglprg_normal_v[] =
-#if defined(_OGLES3_)
-      "#version 300 es \n"
-#else
-      "#version 330 \n"
-#endif
+  "#version 310 es \n"
       "uniform mat4 u_mvpMatrix;    \n"
       "layout (location = 0) in vec4 a_position;   \n"
       "layout (location = 1) in vec4 a_texcoord;   \n"
@@ -209,11 +205,7 @@ const GLchar Yglprg_normal_v[] =
 const GLchar * pYglprg_normal_v[] = {Yglprg_normal_v, NULL};
 
 const GLchar Yglprg_normal_f[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
-#else
-"#version 330 \n"
-#endif
+  "#version 310 es \n"
 "precision highp float;                            \n"
 "in highp vec4 v_texcoord;                            \n"
 "uniform vec4 u_color_offset;    \n"
@@ -262,11 +254,7 @@ int Ygl_cleanupNormal(void * p, YglTextureManager *tm)
 //---------------------------------------------------------
 
 const GLchar Yglprg_normal_cram_f[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
-#else
-"#version 330 \n"
-#endif
+  "#version 310 es \n"
 "precision highp float;\n"
 "precision highp int;\n"
 "in vec4 v_texcoord;\n"
@@ -284,11 +272,7 @@ const GLchar Yglprg_normal_cram_f[] =
 "}\n";
 
 const GLchar Yglprg_normal_cram_special_priority_f[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
-#else
-"#version 330 \n"
-#endif
+  "#version 310 es \n"
 "precision highp float;\n"
 "precision highp int;\n"
 "in vec4 v_texcoord;\n"
@@ -337,8 +321,8 @@ int Ygl_uniformNormalCram(void * p, YglTextureManager *tm, Vdp2 *varVdp2Regs)
 
 int Ygl_cleanupNormalCram(void * p, YglTextureManager *tm)
 {
-  glActiveTexture(GL_TEXTURE0);
   YglProgram * prg;
+  glActiveTexture(GL_TEXTURE0);
   prg = p;
   return 0;
 }
@@ -362,11 +346,7 @@ int Ygl_uniformNormalCramSpecialPriority(void * p, YglTextureManager *tm, Vdp2 *
 
 
 const GLchar Yglprg_normal_cram_addcol_f[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
-#else
-"#version 330 \n"
-#endif
+  "#version 310 es \n"
 "precision highp float;\n"
 "precision highp int;\n"
 "in vec4 v_texcoord;\n"
@@ -409,15 +389,12 @@ int Ygl_uniformAddColCram(void * p, YglTextureManager *tm, Vdp2 *varVdp2Regs)
 
 int Ygl_cleanupAddColCram(void * p, YglTextureManager *tm)
 {
-  glActiveTexture(GL_TEXTURE0);
   YglProgram * prg;
+  glActiveTexture(GL_TEXTURE0);
   prg = p;
   return 0;
 }
 
-
-//
-//
 void Ygl_setNormalshader(YglProgram * prg) {
   if (prg->colornumber >= 3) {
     GLUSEPROG(_prgid[PG_NORMAL]);
@@ -443,11 +420,7 @@ void Ygl_setNormalshader(YglProgram * prg) {
 
 
 const GLchar Yglprg_rgb_cram_line_f[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
-#else
-"#version 330 \n"
-#endif
+  "#version 310 es \n"
 "precision highp float;\n"
 "precision highp int;\n"
 "in vec4 v_texcoord;\n"
@@ -551,9 +524,9 @@ static int up_scale;
 int Ygl_useUpscaleBuffer(void){
   // Create Screen size frame buffer
   if (_Ygl->upfbo == 0) {
+    GLuint error;
     up_scale = 1;
     //if ((_Ygl->rwidth > 500) && (_Ygl->rheight > 400)) up_scale >>= 1;
-    GLuint error;
     glGenTextures(1, &_Ygl->upfbotex);
     glBindTexture(GL_TEXTURE_2D, _Ygl->upfbotex);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, up_scale*_Ygl->width, up_scale*_Ygl->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
@@ -638,8 +611,8 @@ int Ygl_cleanupMosaic(void * p, YglTextureManager *tm)
 int Ygl_uniformPerLineAlpha(void * p, YglTextureManager *tm, Vdp2 *varVdp2Regs)
 {
   YglProgram * prg;
-  prg = p;
   int preblend = 0;
+  prg = p;
 
   Ygl_useTmpBuffer();
   glViewport(0, 0, _Ygl->rwidth, _Ygl->rheight);
@@ -779,11 +752,7 @@ int Ygl_cleanupNormal_blur(void * p, YglTextureManager *tm)
 
 
 const GLchar Yglprg_DestinationAlpha_f[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
-#else
-"#version 330 \n"
-#endif
+  "#version 310 es \n"
 "precision highp float;                                  \n"
 "in highp vec4 v_texcoord;                               \n"
 "uniform vec4 u_color_offset;                            \n"
@@ -811,11 +780,7 @@ const GLchar Yglprg_DestinationAlpha_f[] =
  *  Window Operation
  * ----------------------------------------------------------------------------------*/
 const GLchar Yglprg_window_v[] =
-#if defined(_OGLES3_)
-      "#version 300 es \n"
-#else
-      "#version 330 \n"
-#endif
+  "#version 310 es \n"
       "uniform mat4 u_mvpMatrix;    \n"
       "layout (location = 0) in vec4 a_position;               \n"
       "void main()                  \n"
@@ -825,11 +790,7 @@ const GLchar Yglprg_window_v[] =
 const GLchar * pYglprg_window_v[] = {Yglprg_window_v, NULL};
 
 const GLchar Yglprg_window_f[] =
-#if defined(_OGLES3_)
-      "#version 300 es \n"
-#else
-      "#version 330 \n"
-#endif
+  "#version 310 es \n"
       "precision highp float;                            \n"
       "out vec4 fragColor;            \n"
       "void main()                                         \n"
@@ -860,11 +821,7 @@ int Ygl_cleanupWindow(void * p, YglTextureManager *tm )
  *  VDP1 Normal Draw
  * ----------------------------------------------------------------------------------*/
 const GLchar Yglprg_vdp1_normal_v[] =
-#if defined(_OGLES3_)
-      "#version 300 es \n"
-#else
-      "#version 330 \n"
-#endif
+  "#version 310 es \n"
       "uniform mat4 u_mvpMatrix;    \n"
     "uniform vec2 u_texsize;    \n"
       "layout (location = 0) in vec4 a_position;   \n"
@@ -880,11 +837,7 @@ const GLchar Yglprg_vdp1_normal_v[] =
 const GLchar * pYglprg_vdp1_normal_v[] = {Yglprg_vdp1_normal_v, NULL};
 
 const GLchar Yglprg_vpd1_normal_f[] =
-#if defined(_OGLES3_)
-      "#version 300 es \n"
-#else
-      "#version 330 \n"
-#endif
+  "#version 310 es \n"
       "precision highp float;                            \n"
       "in vec4 v_texcoord;                            \n"
       "uniform sampler2D s_texture;                        \n"
@@ -927,11 +880,7 @@ static YglVdp1CommonParam id_gt = { 0 };
  *  VDP1 GlowShading Operation
  * ----------------------------------------------------------------------------------*/
 const GLchar Yglprg_vdp1_gouraudshading_v[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
-#else
-"#version 330 \n"
-#endif
+  "#version 310 es \n"
 "uniform mat4 u_mvpMatrix;                \n"
 "uniform vec2 u_texsize;    \n"
 "layout (location = 0) in vec4 a_position;               \n"
@@ -949,11 +898,7 @@ const GLchar Yglprg_vdp1_gouraudshading_v[] =
 const GLchar * pYglprg_vdp1_gouraudshading_v[] = {Yglprg_vdp1_gouraudshading_v, NULL};
 
 const GLchar Yglprg_vdp1_gouraudshading_f[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
-#else
-"#version 330 \n"
-#endif
+  "#version 310 es \n"
 "precision highp float;                                                 \n"
 "uniform sampler2D u_sprite;                                              \n"
 "in vec4 v_texcoord;                                                 \n"
@@ -971,11 +916,7 @@ const GLchar Yglprg_vdp1_gouraudshading_f[] =
 const GLchar * pYglprg_vdp1_gouraudshading_f[] = {Yglprg_vdp1_gouraudshading_f, NULL};
 
 const GLchar Yglprg_vdp1_gouraudshading_spd_f[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
-#else
-"#version 330 \n"
-#endif
+  "#version 310 es \n"
 "precision highp float;                                                 \n"
 "uniform sampler2D u_sprite;                                              \n"
 "in vec4 v_texcoord;                                                 \n"
@@ -999,11 +940,7 @@ static YglVdp1CommonParam id_spd_g = { 0 };
  *  VDP1 GlowShading and Half Trans Operation
  * ----------------------------------------------------------------------------------*/
 const GLchar Yglprg_vdp1_gouraudshading_hf_v[] =
-#if defined(_OGLES3_)
-      "#version 300 es \n"
-#else
-      "#version 330 \n"
-#endif
+  "#version 310 es \n"
       "uniform mat4 u_mvpMatrix;                \n"
     "uniform vec2 u_texsize;    \n"
       "layout (location = 0) in vec4 a_position;               \n"
@@ -1021,11 +958,7 @@ const GLchar Yglprg_vdp1_gouraudshading_hf_v[] =
 const GLchar * pYglprg_vdp1_gouraudshading_hf_v[] = {Yglprg_vdp1_gouraudshading_hf_v, NULL};
 
 const GLchar Yglprg_vdp1_gouraudshading_hf_f[] =
-#if defined(_OGLES3_)
-      "#version 300 es \n"
-#else
-      "#version 330 \n"
-#endif
+  "#version 310 es \n"
       "precision highp float;                                                                     \n"
       "uniform highp sampler2D u_sprite;                                                                  \n"
       "uniform highp sampler2D u_fbo;                                                                     \n"
@@ -1063,11 +996,7 @@ static YglVdp1CommonParam id_ght = { 0 };
  *  VDP1 Half Trans Operation
  * ----------------------------------------------------------------------------------*/
 const GLchar Yglprg_vdp1_halftrans_v[] =
-#if defined(_OGLES3_)
-      "#version 300 es \n"
-#else
-      "#version 330 \n"
-#endif
+  "#version 310 es \n"
         "uniform mat4 u_mvpMatrix;                \n"
     "uniform vec2 u_texsize;    \n"
         "layout (location = 0) in vec4 a_position;               \n"
@@ -1086,11 +1015,7 @@ const GLchar Yglprg_vdp1_halftrans_v[] =
 const GLchar * pYglprg_vdp1_halftrans_v[] = {Yglprg_vdp1_halftrans_v, NULL};
 
 const GLchar Yglprg_vdp1_halftrans_f[] =
-#if defined(_OGLES3_)
-      "#version 300 es \n"
-#else
-      "#version 330 \n"
-#endif
+  "#version 310 es \n"
       "precision highp float;                                                                     \n"
       "uniform highp sampler2D u_sprite;                                                           \n"
       "uniform highp sampler2D u_fbo;                                                               \n"
@@ -1123,11 +1048,7 @@ static YglVdp1CommonParam hf = {0};
 *  VDP1 Mesh Operaion
 * ----------------------------------------------------------------------------------*/
 const GLchar Yglprg_vdp1_mesh_v[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
-#else
-"#version 330 \n"
-#endif
+  "#version 310 es \n"
 "uniform mat4 u_mvpMatrix;                \n"
 "uniform vec2 u_texsize;    \n"
 "layout (location = 0) in vec4 a_position;               \n"
@@ -1146,11 +1067,7 @@ const GLchar * pYglprg_vdp1_mesh_v[] = { Yglprg_vdp1_mesh_v, NULL };
 
 #if 1
 const GLchar Yglprg_vdp1_mesh_f[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
-#else
-"#version 330 \n"
-#endif
+  "#version 310 es \n"
 "precision highp float;                                                                     \n"
 "uniform sampler2D u_sprite;                                                                  \n"
 "uniform sampler2D u_fbo;                                                                     \n"
@@ -1179,11 +1096,7 @@ const GLchar Yglprg_vdp1_mesh_f[] =
 "}\n";
 #else
 const GLchar Yglprg_vdp1_mesh_f[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
-#else
-"#version 330 \n"
-#endif
+  "#version 310 es \n"
 "precision highp float;                                                                     \n"
 "uniform sampler2D u_sprite;                                                                  \n"
 "uniform sampler2D u_fbo;                                                                     \n"
@@ -1222,11 +1135,7 @@ static YglVdp1CommonParam mesh = { 0 };
 *  VDP1 Half luminance Operaion
 * ----------------------------------------------------------------------------------*/
 const GLchar Yglprg_vdp1_half_luminance_v[] =
-#if defined(_OGLES3_)
-      "#version 300 es \n"
-#else
-      "#version 330 \n"
-#endif
+  "#version 310 es \n"
       "uniform mat4 u_mvpMatrix;    \n"
     "uniform vec2 u_texsize;    \n"
       "layout (location = 0) in vec4 a_position;   \n"
@@ -1242,11 +1151,7 @@ const GLchar Yglprg_vdp1_half_luminance_v[] =
 const GLchar * pYglprg_vdp1_half_luminance_v[] = {Yglprg_vdp1_half_luminance_v, NULL};
 
 const GLchar Yglprg_vpd1_half_luminance_f[] =
-#if defined(_OGLES3_)
-      "#version 300 es \n"
-#else
-      "#version 330 \n"
-#endif
+  "#version 310 es \n"
       "precision highp float;                            \n"
       "in vec4 v_texcoord;                            \n"
       "uniform sampler2D s_texture;                        \n"
@@ -1272,11 +1177,7 @@ static YglVdp1CommonParam half_luminance = { 0 };
 *    hard/vdp1/hon/p06_37.htm
 * ----------------------------------------------------------------------------------*/
 const GLchar Yglprg_vdp1_shadow_v[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
-#else
-"#version 330 \n"
-#endif
+  "#version 310 es \n"
 "uniform mat4 u_mvpMatrix;                \n"
 "uniform vec2 u_texsize;    \n"
 "layout (location = 0) in vec4 a_position;               \n"
@@ -1295,11 +1196,7 @@ const GLchar Yglprg_vdp1_shadow_v[] =
 const GLchar * pYglprg_vdp1_shadow_v[] = { Yglprg_vdp1_shadow_v, NULL };
 
 const GLchar Yglprg_vdp1_shadow_f[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
-#else
-"#version 330 \n"
-#endif
+  "#version 310 es \n"
 "precision highp float;\n"
 "uniform sampler2D u_sprite;\n"
 "uniform highp sampler2D u_fbo;\n"
@@ -1434,11 +1331,7 @@ typedef struct  {
 DrawFrameBufferUniform g_draw_framebuffer_uniforms[MAX_FRAME_BUFFER_UNIFORM];
 
 const GLchar Yglprg_vdp1_drawfb_v[] =
-#if defined(_OGLES3_)
-      "#version 300 es \n"
-#else
-      "#version 330 \n"
-#endif
+  "#version 310 es \n"
       "uniform mat4 u_mvpMatrix;                \n"
       "layout (location = 0) in vec4 a_position;               \n"
       "layout (location = 1) in vec2 a_texcoord;               \n"
@@ -1450,12 +1343,8 @@ const GLchar Yglprg_vdp1_drawfb_v[] =
 const GLchar * pYglprg_vdp2_drawfb_v[] = {Yglprg_vdp1_drawfb_v, NULL};
 
 const GLchar Yglprg_vdp2_drawfb_f[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
+  "#version 310 es \n"
 "precision highp sampler2D; \n"
-#else
-"#version 330 \n"
-#endif
 "precision highp float;\n"
 "in vec2 v_texcoord;\n"
 "uniform sampler2D s_vdp1FrameBuffer;\n"
@@ -1498,12 +1387,8 @@ refrence:
 */
 
 const GLchar Yglprg_vdp2_drawfb_cram_f[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
+  "#version 310 es \n"
 "precision highp sampler2D; \n"
-#else
-"#version 430 \n"
-#endif
 "precision highp float;\n"
 "layout(std140) uniform vdp2regs { \n"
 " float u_pri[8]; \n"
@@ -1614,12 +1499,8 @@ const GLchar Yglprg_vdp2_drawfb_cram_eiploge_f[] =
 *  Chaos Seed
 * ----------------------------------------------------------------------------------*/
 const GLchar Yglprg_vdp2_drawfb_hblank_f[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
+  "#version 310 es \n"
 "precision highp sampler2D; \n"
-#else
-"#version 430 \n"
-#endif
 "precision highp float;\n"
 "layout(std140) uniform vdp2regs { \n"
 " float u_pri[8]; \n"
@@ -1745,12 +1626,8 @@ const GLchar * pYglprg_vdp2_drawfb_msb_add_hblank_f[]  = { Yglprg_vdp2_drawfb_hb
 
 
 const GLchar Yglprg_vdp2_drawfb_shadow_f[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
+  "#version 310 es \n"
 "precision highp sampler2D; \n"
-#else
-"#version 430 \n"
-#endif
 "precision highp float;\n"
 "layout(std140) uniform vdp2regs { \n"
 " float u_pri[8]; \n"
@@ -1912,12 +1789,13 @@ int YglInitDrawFrameBufferShaders() {
 
 void Ygl_initDrawFrameBuffershader(int id) {
 
+  GLuint scene_block_index;
   int arrayid = id- PG_VDP2_DRAWFRAMEBUFF;
   if ( arrayid < 0 || arrayid >= MAX_FRAME_BUFFER_UNIFORM) {
     abort();
   }
 
-  GLuint scene_block_index = glGetUniformBlockIndex(_prgid[id], "vdp2regs");
+  scene_block_index = glGetUniformBlockIndex(_prgid[id], "vdp2regs");
   glUniformBlockBinding(_prgid[id], scene_block_index, FRAME_BUFFER_UNIFORM_ID);
   g_draw_framebuffer_uniforms[arrayid].idvdp1FrameBuffer = glGetUniformLocation(_prgid[id], (const GLchar *)"s_vdp1FrameBuffer");
   g_draw_framebuffer_uniforms[arrayid].idcram = glGetUniformLocation(_prgid[id], (const GLchar *)"s_color");
@@ -1930,7 +1808,7 @@ void Ygl_initDrawFrameBuffershader(int id) {
 void Ygl_uniformVDP2DrawFramebuffer_perline(void * p, float from, float to, u32 linetexture, Vdp2 *varVdp2Regs)
 {
   YglProgram * prg;
-  prg = p;
+  int arrayid;
 
   int pgid = PG_VDP2_DRAWFRAMEBUFF_HBLANK;
 
@@ -1938,6 +1816,8 @@ void Ygl_uniformVDP2DrawFramebuffer_perline(void * p, float from, float to, u32 
   const int CCRTMD = ((varVdp2Regs->CCCTL >> 9) & 0x01); // hard/vdp2/hon/p12_14.htm#CCRTMD_
   const int CCMD = ((varVdp2Regs->CCCTL >> 8) & 0x01);  // hard/vdp2/hon/p12_14.htm#CCMD_
   const int SPLCEN = (varVdp2Regs->LNCLEN & 0x20); // hard/vdp2/hon/p11_30.htm#NxLCEN_
+
+  prg = p;
 
   if ( SPCCN ) {
     const int SPCCCS = (varVdp2Regs->SPCTL >> 12) & 0x3;
@@ -2007,7 +1887,7 @@ void Ygl_uniformVDP2DrawFramebuffer_perline(void * p, float from, float to, u32 
   }
 
 
-  int arrayid = pgid - PG_VDP2_DRAWFRAMEBUFF;
+  arrayid = pgid - PG_VDP2_DRAWFRAMEBUFF;
   GLUSEPROG(_prgid[pgid]);
 
   glEnableVertexAttribArray(0);
@@ -2056,7 +1936,7 @@ void Ygl_uniformVDP2DrawFrameBufferShadow(void * p) {
 void Ygl_uniformVDP2DrawFramebuffer(void * p, float from, float to, float * offsetcol, int blend, Vdp2 *varVdp2Regs)
 {
    YglProgram * prg;
-   prg = p;
+   int arrayid;
 
    int pgid = PG_VDP2_DRAWFRAMEBUFF;
 
@@ -2064,6 +1944,8 @@ void Ygl_uniformVDP2DrawFramebuffer(void * p, float from, float to, float * offs
    const int CCRTMD = ((varVdp2Regs->CCCTL >> 9) & 0x01); // hard/vdp2/hon/p12_14.htm#CCRTMD_
    const int CCMD = ((varVdp2Regs->CCCTL >> 8) & 0x01);  // hard/vdp2/hon/p12_14.htm#CCMD_
    const int SPLCEN = (varVdp2Regs->LNCLEN & 0x20); // hard/vdp2/hon/p11_30.htm#NxLCEN_
+
+   prg = p;
 
    if ( blend && SPCCN ) {
      const int SPCCCS = (varVdp2Regs->SPCTL >> 12) & 0x3;
@@ -2167,7 +2049,7 @@ void Ygl_uniformVDP2DrawFramebuffer(void * p, float from, float to, float * offs
      pgid = PG_VDP2_DRAWFRAMEBUFF;
    }
 
-   int arrayid = pgid - PG_VDP2_DRAWFRAMEBUFF;
+   arrayid = pgid - PG_VDP2_DRAWFRAMEBUFF;
    GLUSEPROG(_prgid[pgid]);
 
    glEnableVertexAttribArray(0);
@@ -2207,12 +2089,8 @@ void Ygl_uniformVDP2DrawFramebuffer(void * p, float from, float to, float * offs
 * ----------------------------------------------------------------------------------*/
 
 const GLchar Yglprg_vdp2_drawfb_addcolor_shadow_f[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
+  "#version 310 es \n"
 "precision highp sampler2D; \n"
-#else
-"#version 330 \n"
-#endif
 "precision highp float;\n"
 "in vec2 v_texcoord;\n"
 "uniform sampler2D s_vdp1FrameBuffer;\n"
@@ -2293,11 +2171,7 @@ int Ygl_cleanupAddBlend(void * p, YglTextureManager *tm)
 const GLchar * pYglprg_linecol_v[] = { Yglprg_normal_v, NULL };
 
 const GLchar Yglprg_linecol_f[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
-#else
-"#version 330 \n"
-#endif
+  "#version 310 es \n"
 "precision highp float;\n"
 "in highp vec4 v_texcoord;\n"
 "uniform vec4 u_color_offset;\n"
@@ -3022,11 +2896,7 @@ int YglProgramChange( YglLevel * level, int prgid )
 static int clear_prg = -1;
 
 static const char vclear_img[] =
-#if defined (_OGLES3_)
-      "#version 300 es \n"
-#else
-      "#version 330 \n"
-#endif
+  "#version 310 es \n"
   "layout (location = 0) in vec2 aPosition;   \n"
   "  \n"
   " void main(void) \n"
@@ -3036,11 +2906,7 @@ static const char vclear_img[] =
 
 
 static const char fclear_img[] =
-#if defined (_OGLES3_)
-      "#version 300 es \n"
-#else
-      "#version 330 \n"
-#endif
+  "#version 310 es \n"
   "precision highp float;       \n"
   "uniform float u_emu_height; \n"
   "uniform float u_vheight; \n"
@@ -3055,6 +2921,12 @@ static const char fclear_img[] =
   "} \n";
 
 int YglDrawBackScreen(float w, float h) {
+
+  float const vertexPosition[] = {
+    1.0f, -1.0f,
+    -1.0f, -1.0f,
+    1.0f, 1.0f,
+    -1.0f, 1.0f };
 
   if (clear_prg == -1){
     GLuint vshader;
@@ -3115,12 +2987,6 @@ int YglDrawBackScreen(float w, float h) {
   glDisable(GL_DEPTH_TEST);
   glDisable(GL_BLEND);
 
-  float const vertexPosition[] = {
-    1.0f, -1.0f,
-    -1.0f, -1.0f,
-    1.0f, 1.0f,
-    -1.0f, 1.0f };
-
   glEnableVertexAttribArray(0);
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, vertexPosition);
 
@@ -3146,11 +3012,7 @@ static int vdp1_prg = -1;
 static GLint vdp1MtxModelView = 0;
 
 static const char vdp1_v[] =
-#if defined(_OGLES3_)
-      "#version 300 es \n"
-#else
-      "#version 330 \n"
-#endif
+  "#version 310 es \n"
       "layout (location = 0) in vec2 a_position;   \n"
       "layout (location = 1) in vec2 a_texcoord;   \n"
       "out  highp vec2 v_texcoord;     \n"
@@ -3161,11 +3023,7 @@ static const char vdp1_v[] =
       "} ";
 
 static const char vdp1_f[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
-#else
-"#version 330 \n"
-#endif
+  "#version 310 es \n"
 "precision highp float;                            \n"
 "in highp vec2 v_texcoord;                            \n"
 "uniform sampler2D s_texture;                        \n"
@@ -3185,6 +3043,26 @@ static const char vdp1_f[] =
 int YglBlitVDP1(u32 srcTexture, float w, float h, int flip) {
   const GLchar * fblit_vdp1_v[] = { vdp1_v, NULL };
   const GLchar * fblit_vdp1_f[] = { vdp1_f, NULL };
+
+  float const vertexPosition[] = {
+    1.0, -1.0f,
+    -1.0, -1.0f,
+    1.0, 1.0f,
+    -1.0, 1.0f };
+
+  float const textureCoord[] = {
+    w, h,
+    0.0f, h,
+    w, 0.0f,
+    0.0f, 0.0f
+  };
+  float const textureCoordFlip[] = {
+    w, 0.0f,
+    0.0f, 0.0f,
+    w, h,
+    0.0f, h
+  };
+
   if (vdp1_prg == -1){
     GLuint vshader;
     GLuint fshader;
@@ -3240,24 +3118,6 @@ int YglBlitVDP1(u32 srcTexture, float w, float h, int flip) {
   glDisable(GL_DEPTH_TEST);
   glDisable(GL_BLEND);
 
-  float const vertexPosition[] = {
-    1.0, -1.0f,
-    -1.0, -1.0f,
-    1.0, 1.0f,
-    -1.0, 1.0f };
-
-  float const textureCoord[] = {
-    w, h,
-    0.0f, h,
-    w, 0.0f,
-    0.0f, 0.0f
-  };
-  float const textureCoordFlip[] = {
-    w, 0.0f,
-    0.0f, 0.0f,
-    w, h,
-    0.0f, h
-  };
   glEnableVertexAttribArray(0);
   glEnableVertexAttribArray(1);
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, vertexPosition);
@@ -3290,11 +3150,7 @@ static int outputSize = -1;
 static int inputSize = -1;
 
 static const char vblit_img[] =
-#if defined (_OGLES3_)
-      "#version 300 es \n"
-#else
-      "#version 330 \n"
-#endif
+  "#version 310 es \n"
   "layout (location = 0) in vec2 aPosition;   \n"
   "layout (location = 1) in vec2 aTexCoord;   \n"
   "out  highp vec2 vTexCoord;     \n"
@@ -3307,11 +3163,7 @@ static const char vblit_img[] =
 
 
 static const char fblit_head[] =
-#if defined (_OGLES3_)
-      "#version 300 es \n"
-#else
-      "#version 330 \n"
-#endif
+  "#version 310 es \n"
   "precision highp float;       \n"
   "uniform float fWidth; \n"
   "uniform float fHeight; \n"
@@ -3367,7 +3219,33 @@ static const char fblitbilinear_img[] =
 int YglBlitFramebuffer(u32 srcTexture, u32 targetFbo, float w, float h, float dispw, float disph) {
   float width = w;
   float height = h;
+  int decim;
   u32 tex = srcTexture;
+  const GLchar * fblit_img_v[] = { fblit_head, fblitnear_img, fblit_img, fblit_img_end, NULL };
+  const GLchar * fblitbilinear_img_v[] = { fblit_head, fblitnear_img, fblit_img, fblit_img_end, NULL };
+  const GLchar * fblitbicubic_img_v[] = { fblit_head, fblitbicubic_img, fblit_img, fblit_img_end, NULL };
+  const GLchar * fblit_img_scanline_v[] = { fblit_head, fblitnear_img, fblit_img, Yglprg_blit_scanline_f, fblit_img_end, NULL };
+  const GLchar * fblitbilinear_img_scanline_v[] = { fblit_head, fblitnear_img, fblit_img, Yglprg_blit_scanline_f, fblit_img_end, NULL };
+  const GLchar * fblitbicubic_img_scanline_v[] = { fblit_head, fblitbicubic_img, fblit_img, Yglprg_blit_scanline_f, fblit_img_end, NULL };
+
+  float const vertexPosition[] = {
+    1.0f, -1.0f,
+    -1.0f, -1.0f,
+    1.0f, 1.0f,
+    -1.0f, 1.0f };
+
+  float const textureCoord[16] = {
+    1.0f, 0.0f,
+    0.0f, 0.0f,
+    1.0f, 1.0f,
+    0.0f, 1.0f,
+    0.0f, 0.0f,
+    0.0f, 1.0f,
+    1.0f, 0.0f,
+    1.0f, 1.0f };
+
+  float nbLines = yabsys.IsPal?625.0f:525.0f;
+
   if (_Ygl->upmode != UP_NONE) {
     int scale = 1; 
     scale = Ygl_useUpscaleBuffer();
@@ -3383,13 +3261,6 @@ int YglBlitFramebuffer(u32 srcTexture, u32 targetFbo, float w, float h, float di
   }
 
   glBindFramebuffer(GL_FRAMEBUFFER, targetFbo);
-
-  const GLchar * fblit_img_v[] = { fblit_head, fblitnear_img, fblit_img, fblit_img_end, NULL };
-  const GLchar * fblitbilinear_img_v[] = { fblit_head, fblitnear_img, fblit_img, fblit_img_end, NULL };
-  const GLchar * fblitbicubic_img_v[] = { fblit_head, fblitbicubic_img, fblit_img, fblit_img_end, NULL };
-  const GLchar * fblit_img_scanline_v[] = { fblit_head, fblitnear_img, fblit_img, Yglprg_blit_scanline_f, fblit_img_end, NULL };
-  const GLchar * fblitbilinear_img_scanline_v[] = { fblit_head, fblitnear_img, fblit_img, Yglprg_blit_scanline_f, fblit_img_end, NULL };
-  const GLchar * fblitbicubic_img_scanline_v[] = { fblit_head, fblitbicubic_img, fblit_img, Yglprg_blit_scanline_f, fblit_img_end, NULL };
 
   if ((blit_prg == -1) || (blit_mode != _Ygl->aamode) || (scanline != _Ygl->scanline)){
     GLuint vshader;
@@ -3473,28 +3344,8 @@ int YglBlitFramebuffer(u32 srcTexture, u32 targetFbo, float w, float h, float di
     GLUSEPROG(blit_prg);
   }
 
-
   glDisable(GL_DEPTH_TEST);
   glDisable(GL_BLEND);
-
-  float const vertexPosition[] = {
-    1.0f, -1.0f,
-    -1.0f, -1.0f,
-    1.0f, 1.0f,
-    -1.0f, 1.0f };
-
-
-  float const textureCoord[16] = {
-    1.0f, 0.0f,
-    0.0f, 0.0f,
-    1.0f, 1.0f,
-    0.0f, 1.0f,
-    0.0f, 0.0f,
-    0.0f, 1.0f,
-    1.0f, 0.0f,
-    1.0f, 1.0f };
-
-  float nbLines = yabsys.IsPal?625.0f:525.0f;
 
   glEnableVertexAttribArray(0);
   glEnableVertexAttribArray(1);
@@ -3503,7 +3354,7 @@ int YglBlitFramebuffer(u32 srcTexture, u32 targetFbo, float w, float h, float di
   glUniform1f(u_w, width);
   glUniform1f(u_h, height);
   glUniform2f(u_l, nbLines, disph);
-  int decim = (disph + nbLines) / nbLines;
+  decim = (disph + nbLines) / nbLines;
   if (decim < 2) decim = 2;
   glUniform1f(u_d, (float)decim);
 
@@ -3531,11 +3382,7 @@ int YglBlitFramebuffer(u32 srcTexture, u32 targetFbo, float w, float h, float di
 
 
 const GLchar vclearb_img[] =
-#if defined(_OGLES3_)
-      "#version 300 es \n"
-#else
-      "#version 330 \n"
-#endif
+  "#version 310 es \n"
       "layout (location = 0) in vec4 a_position;   \n"
       "void main()                  \n"
       "{                            \n"
@@ -3543,11 +3390,7 @@ const GLchar vclearb_img[] =
       "} ";
 
 const GLchar fclearb_img[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
-#else
-"#version 330 \n"
-#endif
+  "#version 310 es \n"
 "precision highp float;                            \n"
 "out vec4 fragColor;            \n"
 "void main()                                         \n"
@@ -3556,12 +3399,18 @@ const GLchar fclearb_img[] =
 "}                                                   \n";
 
 int YglClear() {
+  float const vertexPosition[] = {
+    1.0, -1.0f,
+    -1.0, -1.0f,
+    1.0, 1.0f,
+    -1.0, 1.0f };
   if (clear_prg == -1){
     GLuint vshader;
     GLuint fshader;
     GLint compiled, linked;
     const GLchar * vclearb_img_v[] = { vclearb_img, NULL };
     const GLchar * fclearb_img_v[] = { fclearb_img, NULL };
+
     clear_prg = glCreateProgram();
     if (clear_prg == 0){
       return -1;
@@ -3605,12 +3454,6 @@ int YglClear() {
   else{
     GLUSEPROG(clear_prg);
   }
-  float const vertexPosition[] = {
-    1.0, -1.0f,
-    -1.0, -1.0f,
-    1.0, 1.0f,
-    -1.0, 1.0f };
-
 
   glEnableVertexAttribArray(0);
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, vertexPosition);
@@ -3626,11 +3469,7 @@ hard/vdp2/hon/p12_13.htm
 */
 
 const GLchar blur_blit_v[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
-#else
-"#version 330 \n"
-#endif
+  "#version 310 es \n"
 "uniform mat4 u_mvpMatrix;    \n"
 "layout (location = 0) in vec4 a_position;   \n"
 "layout (location = 1) in vec2 a_texcoord;   \n"
@@ -3642,11 +3481,7 @@ const GLchar blur_blit_v[] =
 "} ";
 
 const GLchar blur_blit_f[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
-#else
-"#version 330 \n"
-#endif
+  "#version 310 es \n"
 "precision highp float;                            \n"
 "in highp vec2 v_texcoord;                            \n"
 "uniform sampler2D u_Src;                        \n"
@@ -3673,7 +3508,7 @@ static int u_blur_mtxModelView = -1;
 static int u_blur_tw = -1;
 static int u_blur_th = -1;
 
-int YglBlitBlur(u32 srcTexture, u32 targetFbo, float w, float h, float * matrix) {
+int YglBlitBlur(u32 srcTexture, u32 targetFbo, float w, float h, GLfloat* matrix) {
 
   float vb[] = { 0, 0,
     2.0, 0.0,
@@ -3779,11 +3614,7 @@ hard/vdp2/hon/p12_13.htm
 */
 
 const GLchar mosaic_blit_v[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
-#else
-"#version 330 \n"
-#endif
+  "#version 310 es \n"
 "uniform mat4 u_mvpMatrix;    \n"
 "layout (location = 0) in vec4 a_position;   \n"
 "layout (location = 1) in vec2 a_texcoord;   \n"
@@ -3795,11 +3626,7 @@ const GLchar mosaic_blit_v[] =
 "} ";
 
 const GLchar mosaic_blit_f[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
-#else
-"#version 330 \n"
-#endif
+  "#version 310 es \n"
 "precision highp float;                            \n"
 "in highp vec2 v_texcoord;                            \n"
 "uniform sampler2D u_Src;                        \n"
@@ -3827,7 +3654,7 @@ static int u_mosaic_tw = -1;
 static int u_mosaic_th = -1;
 static int u_mosaic = -1;
 
-int YglBlitMosaic(u32 srcTexture, u32 targetFbo, float w, float h, float * matrix, int * mosaic) {
+int YglBlitMosaic(u32 srcTexture, u32 targetFbo, float w, float h, GLfloat* matrix, int * mosaic) {
 
   float vb[] = { 0, 0,
     2.0, 0.0,
@@ -3936,11 +3763,7 @@ int YglBlitMosaic(u32 srcTexture, u32 targetFbo, float w, float h, float * matri
 */
 
 const GLchar perlinealpha_blit_v[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
-#else
-"#version 330 \n"
-#endif
+  "#version 310 es \n"
 "uniform mat4 u_mvpMatrix;    \n"
 "layout (location = 0) in vec4 a_position;   \n"
 "layout (location = 1) in vec2 a_texcoord;   \n"
@@ -3952,11 +3775,7 @@ const GLchar perlinealpha_blit_v[] =
 "} ";
 
 const GLchar perlinealpha_blit_f[] =
-#if defined(_OGLES3_)
-"#version 300 es \n"
-#else
-"#version 330 \n"
-#endif
+  "#version 310 es \n"
 "precision highp float;                            \n"
 "in highp vec2 v_texcoord;                            \n"
 "uniform sampler2D u_Src;                        \n"
@@ -3992,7 +3811,7 @@ static int u_perlinealpha_tw = -1;
 static int u_perlinealpha_th = -1;
 
 
-int YglBlitPerLineAlpha(u32 srcTexture, u32 targetFbo, float w, float h, float * matrix, u32 lineTexture) {
+int YglBlitPerLineAlpha(u32 srcTexture, u32 targetFbo, float w, float h, GLfloat* matrix, u32 lineTexture) {
 
   float vb[] = { 0, 0,
     2.0, 0.0,
@@ -4004,6 +3823,8 @@ int YglBlitPerLineAlpha(u32 srcTexture, u32 targetFbo, float w, float h, float *
     1.0, 1.0,
     0.0, 1.0 };
 
+  GLint programid;
+  int id_src, id_line;
 
   vb[0] = 0;
   vb[1] = 0 - 1.0;
@@ -4014,7 +3835,6 @@ int YglBlitPerLineAlpha(u32 srcTexture, u32 targetFbo, float w, float h, float *
   vb[6] = 0;
   vb[7] = h - 1.0;
 
-  GLint programid;
   glGetIntegerv(GL_CURRENT_PROGRAM, &programid);
 
   glBindFramebuffer(GL_FRAMEBUFFER, targetFbo);
@@ -4065,9 +3885,9 @@ int YglBlitPerLineAlpha(u32 srcTexture, u32 targetFbo, float w, float h, float *
       return -1;
     }
     GLUSEPROG(perlinealpha_prg);
-    int id_src = glGetUniformLocation(perlinealpha_prg, "u_Src");
+    id_src = glGetUniformLocation(perlinealpha_prg, "u_Src");
     glUniform1i(id_src, 0);
-    int id_line = glGetUniformLocation(perlinealpha_prg, "u_Line");
+    id_line = glGetUniformLocation(perlinealpha_prg, "u_Line");
     glUniform1i(id_line, 1);
 
     u_perlinealpha_mtxModelView = glGetUniformLocation(perlinealpha_prg, (const GLchar *)"u_mvpMatrix");
@@ -4087,9 +3907,9 @@ int YglBlitPerLineAlpha(u32 srcTexture, u32 targetFbo, float w, float h, float *
   glUniform1f(u_perlinealpha_tw, w);
   glUniform1f(u_perlinealpha_th, h);
 
-  int id_src = glGetUniformLocation(perlinealpha_prg, "u_Src");
+  id_src = glGetUniformLocation(perlinealpha_prg, "u_Src");
   glUniform1i(id_src, 0);
-  int id_line = glGetUniformLocation(perlinealpha_prg, "u_Line");
+  id_line = glGetUniformLocation(perlinealpha_prg, "u_Line");
   glUniform1i(id_line, 1);
 
   glActiveTexture(GL_TEXTURE0);

@@ -38,11 +38,8 @@ static int game_width  = 320;
 static int game_height = 240;
 static int game_interlace;
 
-#define KRONOS_CORE_GEOMETRY_MAX_W 1408; // 704*2
-#define KRONOS_CORE_GEOMETRY_MAX_H 1024; // 512*2
-
-static int current_width  = KRONOS_CORE_GEOMETRY_MAX_W;
-static int current_height = KRONOS_CORE_GEOMETRY_MAX_H;
+static int current_width;
+static int current_height;
 
 static bool hle_bios_force = false;
 static bool frameskip_enable = false;
@@ -51,6 +48,7 @@ static int filter_mode = AA_NONE;
 static int upscale_mode = UP_NONE;
 static int scanlines = 0;
 static int resolution_mode = 1;
+static int initial_resolution_mode = 0;
 static int numthreads = 4;
 static int retro_region = RETRO_REGION_NTSC;
 static bool stv_mode = false;
@@ -98,7 +96,7 @@ void retro_set_environment(retro_environment_t cb)
       { "kronos_addon_cart", "Addon Cartridge (restart); none|1M_ram|4M_ram" },
       { "kronos_filter_mode", "Filter Mode; none|bilinear|bicubic" },
       { "kronos_upscale_mode", "Upscale Mode; none|hq4x|4xbrz|2xbrz" },
-      { "kronos_resolution_mode", "Resolution Mode; original|2x|4x" },
+      { "kronos_resolution_mode", "Resolution Mode; original|2x|4x|8x|16x" },
       { "kronos_scanlines", "Scanlines; disabled|enabled" },
       { NULL, NULL },
    };
@@ -650,9 +648,11 @@ void retro_reinit_av_info(void)
 
 void retro_set_resolution()
 {
-   // Let's use maximum available size in the glViewport call, while keeping ratio
-   current_width = game_width * (game_height > 256 && resolution_mode == 4 ? 2 : resolution_mode);
-   current_height = game_height * (game_height > 256 && resolution_mode == 4 ? 2 : resolution_mode);
+   // If resolution_mode > initial_resolution_mode, we'll need a restart to reallocate the max size for buffer
+   if (resolution_mode > initial_resolution_mode)
+      resolution_mode = initial_resolution_mode;
+   current_width = game_width * (game_height > 256 && resolution_mode == 16 ? 8 : resolution_mode);
+   current_height = game_height * (game_height > 256 && resolution_mode == 16 ? 8 : resolution_mode);
    VIDCore->Resize(0, 0, current_width, current_height, 0);
    retro_reinit_av_info();
    VIDCore->SetSettingValue(VDP_SETTING_RESOLUTION_MODE, resolution_mode);
@@ -731,16 +731,122 @@ void retro_get_system_info(struct retro_system_info *info)
    info->valid_extensions = "bin|cue|iso|mds|ccd|nrg|zip";
 }
 
+void check_variables(void)
+{
+   struct retro_variable var;
+   var.key = "kronos_frameskip";
+   var.value = NULL;
+
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (strcmp(var.value, "disabled") == 0 && frameskip_enable)
+      {
+         DisableAutoFrameSkip();
+         frameskip_enable = false;
+      }
+      else if (strcmp(var.value, "enabled") == 0 && !frameskip_enable)
+      {
+         EnableAutoFrameSkip();
+         frameskip_enable = true;
+      }
+   }
+
+   var.key = "kronos_force_hle_bios";
+   var.value = NULL;
+
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (strcmp(var.value, "disabled") == 0 && hle_bios_force)
+         hle_bios_force = false;
+      else if (strcmp(var.value, "enabled") == 0 && !hle_bios_force)
+         hle_bios_force = true;
+   }
+
+   var.key = "kronos_addon_cart";
+   var.value = NULL;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (strcmp(var.value, "none") == 0 && addon_cart_type != CART_NONE)
+         addon_cart_type = CART_NONE;
+      else if (strcmp(var.value, "1M_ram") == 0 && addon_cart_type != CART_DRAM8MBIT)
+         addon_cart_type = CART_DRAM8MBIT;
+      else if (strcmp(var.value, "4M_ram") == 0 && addon_cart_type != CART_DRAM32MBIT)
+         addon_cart_type = CART_DRAM32MBIT;
+   }
+
+   var.key = "kronos_filter_mode";
+   var.value = NULL;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (strcmp(var.value, "none") == 0 && filter_mode != AA_NONE)
+         filter_mode = AA_NONE;
+      else if (strcmp(var.value, "bilinear") == 0 && filter_mode != AA_BILINEAR_FILTER)
+         filter_mode = AA_BILINEAR_FILTER;
+      else if (strcmp(var.value, "bicubic") == 0 && filter_mode != AA_BICUBIC_FILTER)
+         filter_mode = AA_BICUBIC_FILTER;
+   }
+
+   var.key = "kronos_upscale_mode";
+   var.value = NULL;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (strcmp(var.value, "none") == 0 && upscale_mode != UP_NONE)
+         upscale_mode = UP_NONE;
+      else if (strcmp(var.value, "hq4x") == 0 && upscale_mode != UP_HQ4X)
+         upscale_mode = UP_HQ4X;
+      else if (strcmp(var.value, "4xbrz") == 0 && upscale_mode != UP_4XBRZ)
+         upscale_mode = UP_4XBRZ;
+      else if (strcmp(var.value, "2xbrz") == 0 && upscale_mode != UP_2XBRZ)
+         upscale_mode = UP_2XBRZ;
+   }
+
+   var.key = "kronos_resolution_mode";
+   var.value = NULL;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (strcmp(var.value, "original") == 0)
+         resolution_mode = 1;
+      else if (strcmp(var.value, "2x") == 0)
+         resolution_mode = 2;
+      else if (strcmp(var.value, "4x") == 0)
+         resolution_mode = 4;
+      else if (strcmp(var.value, "8x") == 0)
+         resolution_mode = 8;
+      else if (strcmp(var.value, "16x") == 0)
+         resolution_mode = 16;
+   }
+
+   var.key = "kronos_scanlines";
+   var.value = NULL;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (strcmp(var.value, "disabled") == 0 && scanlines != 0)
+         scanlines = 0;
+      else if (strcmp(var.value, "enabled") == 0 && scanlines != 1)
+         scanlines = 1;
+   }
+
+}
+
 void retro_get_system_av_info(struct retro_system_av_info *info)
 {
    memset(info, 0, sizeof(*info));
+
+   if(initial_resolution_mode == 0)
+   {
+      // Get the initial resolution mode at start
+      // It will be the resolution_mode limit until the core is restarted
+      check_variables();
+      initial_resolution_mode = resolution_mode;
+   }
 
    info->timing.fps            = (retro_get_region() == RETRO_REGION_NTSC) ? 60.0f : 50.0f;
    info->timing.sample_rate    = SAMPLERATE;
    info->geometry.base_width   = game_width;
    info->geometry.base_height  = game_height;
-   info->geometry.max_width    = KRONOS_CORE_GEOMETRY_MAX_W;
-   info->geometry.max_height   = KRONOS_CORE_GEOMETRY_MAX_H;
+   // No need to go above 8x what is needed by Hi-Res games, we disallow 16x for Hi-Res games
+   info->geometry.max_width    = 704 * (initial_resolution_mode == 16 ? 8 : initial_resolution_mode);
+   info->geometry.max_height   = 512 * (initial_resolution_mode == 16 ? 8 : initial_resolution_mode);
    info->geometry.aspect_ratio = (retro_get_region() == RETRO_REGION_NTSC) ? 4.0 / 3.0 : 5.0 / 4.0;
 }
 
@@ -825,99 +931,6 @@ static char full_path[256];
 static char bios_path[256];
 static char stv_bios_path[256];
 static char stv_bup_path[256];
-
-static void check_variables(void)
-{
-   struct retro_variable var;
-   var.key = "kronos_frameskip";
-   var.value = NULL;
-
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-   {
-      if (strcmp(var.value, "disabled") == 0 && frameskip_enable)
-      {
-         DisableAutoFrameSkip();
-         frameskip_enable = false;
-      }
-      else if (strcmp(var.value, "enabled") == 0 && !frameskip_enable)
-      {
-         EnableAutoFrameSkip();
-         frameskip_enable = true;
-      }
-   }
-
-   var.key = "kronos_force_hle_bios";
-   var.value = NULL;
-
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-   {
-      if (strcmp(var.value, "disabled") == 0 && hle_bios_force)
-         hle_bios_force = false;
-      else if (strcmp(var.value, "enabled") == 0 && !hle_bios_force)
-         hle_bios_force = true;
-   }
-
-   var.key = "kronos_addon_cart";
-   var.value = NULL;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-   {
-      if (strcmp(var.value, "none") == 0 && addon_cart_type != CART_NONE)
-         addon_cart_type = CART_NONE;
-      else if (strcmp(var.value, "1M_ram") == 0 && addon_cart_type != CART_DRAM8MBIT)
-         addon_cart_type = CART_DRAM8MBIT;
-      else if (strcmp(var.value, "4M_ram") == 0 && addon_cart_type != CART_DRAM32MBIT)
-         addon_cart_type = CART_DRAM32MBIT;
-   }
-
-   var.key = "kronos_filter_mode";
-   var.value = NULL;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-   {
-      if (strcmp(var.value, "none") == 0 && filter_mode != AA_NONE)
-         filter_mode = AA_NONE;
-      else if (strcmp(var.value, "bilinear") == 0 && filter_mode != AA_BILINEAR_FILTER)
-         filter_mode = AA_BILINEAR_FILTER;
-      else if (strcmp(var.value, "bicubic") == 0 && filter_mode != AA_BICUBIC_FILTER)
-         filter_mode = AA_BICUBIC_FILTER;
-   }
-
-   var.key = "kronos_upscale_mode";
-   var.value = NULL;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-   {
-      if (strcmp(var.value, "none") == 0 && upscale_mode != UP_NONE)
-         upscale_mode = UP_NONE;
-      else if (strcmp(var.value, "hq4x") == 0 && upscale_mode != UP_HQ4X)
-         upscale_mode = UP_HQ4X;
-      else if (strcmp(var.value, "4xbrz") == 0 && upscale_mode != UP_4XBRZ)
-         upscale_mode = UP_4XBRZ;
-      else if (strcmp(var.value, "2xbrz") == 0 && upscale_mode != UP_2XBRZ)
-         upscale_mode = UP_2XBRZ;
-   }
-
-   var.key = "kronos_resolution_mode";
-   var.value = NULL;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-   {
-      if (strcmp(var.value, "original") == 0)
-         resolution_mode = 1;
-      else if (strcmp(var.value, "2x") == 0)
-         resolution_mode = 2;
-      else if (strcmp(var.value, "4x") == 0)
-         resolution_mode = 4;
-   }
-
-   var.key = "kronos_scanlines";
-   var.value = NULL;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-   {
-      if (strcmp(var.value, "disabled") == 0 && scanlines != 0)
-         scanlines = 0;
-      else if (strcmp(var.value, "enabled") == 0 && scanlines != 1)
-         scanlines = 1;
-   }
-
-}
 
 static int does_file_exist(const char *filename)
 {
