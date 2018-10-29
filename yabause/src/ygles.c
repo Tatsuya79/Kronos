@@ -48,6 +48,7 @@ extern int YglDrawBackScreen(float w, float h);
 static int YglCalcTextureQ( float   *pnts,float *q);
 static void YglRenderDestinationAlpha(Vdp2 *varVdp2Regs);
 
+static void waitVdp1End(int id);
 static void executeTMVDP1(int in, int out);
 
 u32 * YglGetColorRamPointer();
@@ -627,7 +628,7 @@ void YglTmPull(YglTextureManager * tm, u32 flg){
 void YglTMCheck()
 {
   YglTextureManager * tm = YglTM_vdp1[_Ygl->drawframe];
-  if ((tm->width > 2048) || (tm->height > 2048)) {
+  if ((tm->width > 3072) || (tm->height > 3072)) {
     executeTMVDP1(_Ygl->drawframe,_Ygl->drawframe);
   }
 }
@@ -747,6 +748,7 @@ void YglTMAllocate(YglTextureManager * tm, YglTexture * output, unsigned int w, 
 u32* getVdp1DrawingFBMem(int id) {
   u32* fbptr = NULL;
   GLuint error;
+  executeTMVDP1(id, id);
   YglGenFrameBuffer();
   glBindFramebuffer(GL_FRAMEBUFFER, _Ygl->vdp1AccessFB);
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _Ygl->vdp1AccessTex[id], 0);
@@ -1150,9 +1152,9 @@ int YglInit(int width, int height, unsigned int depth) {
   glPixelStorei(GL_PACK_ALIGNMENT, 1);
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-  YglTM_vdp1[0] = YglTMInit(2048, 512);
-  YglTM_vdp1[1] = YglTMInit(2048, 512);
-  YglTM_vdp2 = YglTMInit(2048, 512);
+  YglTM_vdp1[0] = YglTMInit(2048, 2048);
+  YglTM_vdp1[1] = YglTMInit(2048, 2048);
+  YglTM_vdp2 = YglTMInit(2048, 2048);
 
   _Ygl->smallfbo = 0;
   _Ygl->smallfbotex = 0;
