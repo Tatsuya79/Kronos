@@ -65,6 +65,7 @@ static int filter_mode = AA_NONE;
 static int upscale_mode = UP_NONE;
 static int scanlines = 0;
 static int resolution_mode = 1;
+static int polygon_mode = PERSPECTIVE_CORRECTION;
 static int initial_resolution_mode = 0;
 static int numthreads = 4;
 static int retro_region = RETRO_REGION_NTSC;
@@ -118,6 +119,7 @@ void retro_set_environment(retro_environment_t cb)
       { "kronos_filter_mode", "Filter Mode; none|bilinear|bicubic" },
       { "kronos_upscale_mode", "Upscale Mode; none|hq4x|4xbrz|2xbrz" },
       { "kronos_resolution_mode", "Resolution Mode; original|2x|4x|8x|16x" },
+      { "kronos_polygon_mode", "Polygon Mode; perspective_correction|gpu_tesselation|cpu_tesselation" },
       { "kronos_scanlines", "Scanlines; disabled|enabled" },
       { NULL, NULL },
    };
@@ -867,6 +869,18 @@ void check_variables(void)
          resolution_mode = 16;
    }
 
+   var.key = "kronos_polygon_mode";
+   var.value = NULL;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (strcmp(var.value, "perspective_correction") == 0)
+         polygon_mode = PERSPECTIVE_CORRECTION;
+      else if (strcmp(var.value, "gpu_tesselation") == 0)
+         polygon_mode = GPU_TESSERATION;
+      else if (strcmp(var.value, "cpu_tesselation") == 0)
+         polygon_mode = CPU_TESSERATION;
+   }
+
    var.key = "kronos_scanlines";
    var.value = NULL;
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
@@ -1033,34 +1047,35 @@ bool retro_load_game_common()
    if (!retro_init_hw_context())
       return false;
 
-   yinit.vidcoretype        = VIDCORE_OGL;
-   yinit.percoretype        = PERCORE_LIBRETRO;
-   yinit.sh2coretype        = 8;
-   yinit.sndcoretype        = SNDCORE_LIBRETRO;
+   yinit.vidcoretype             = VIDCORE_OGL;
+   yinit.percoretype             = PERCORE_LIBRETRO;
+   yinit.sh2coretype             = 8;
+   yinit.sndcoretype             = SNDCORE_LIBRETRO;
 #ifdef HAVE_MUSASHI
-   yinit.m68kcoretype       = M68KCORE_MUSASHI;
+   yinit.m68kcoretype            = M68KCORE_MUSASHI;
 #else
-   yinit.m68kcoretype       = M68KCORE_C68K;
+   yinit.m68kcoretype            = M68KCORE_C68K;
 #endif
-   yinit.regionid           = REGION_AUTODETECT;
-   yinit.mpegpath           = NULL;
+   yinit.regionid                = REGION_AUTODETECT;
+   yinit.mpegpath                = NULL;
 #ifdef FRAMESKIP_ENABLED
-   yinit.frameskip          = frameskip_enable;
+   yinit.frameskip               = frameskip_enable;
 #endif
-   yinit.clocksync          = 0;
-   yinit.basetime           = 0;
-   yinit.usethreads         = 1;
-   yinit.numthreads         = numthreads;
+   yinit.clocksync               = 0;
+   yinit.basetime                = 0;
+   yinit.usethreads              = 1;
+   yinit.numthreads              = numthreads;
 #ifdef SPRITE_CACHE
-   yinit.useVdp1cache       = 0;
+   yinit.useVdp1cache            = 0;
 #endif
-   yinit.usecache           = 0;
-   yinit.skip_load          = 0;
-   yinit.video_filter_type  = filter_mode;
-   yinit.video_upscale_type = upscale_mode;
-   //yinit.resolution_mode    = resolution_mode;
-   yinit.scanline           = scanlines;
-   yinit.stretch            = 1;
+   yinit.usecache                = 0;
+   yinit.skip_load               = 0;
+   yinit.video_filter_type       = filter_mode;
+   yinit.video_upscale_type      = upscale_mode;
+   yinit.polygon_generation_mode = polygon_mode;
+   //yinit.resolution_mode       = resolution_mode;
+   yinit.scanline                = scanlines;
+   yinit.stretch                 = 1;
 
    return true;
 }
@@ -1483,6 +1498,7 @@ void retro_run(void)
       if(prev_resolution_mode != resolution_mode)
          retro_set_resolution();
       VIDCore->SetSettingValue(VDP_SETTING_FILTERMODE, filter_mode);
+      VIDCore->SetSettingValue(VDP_SETTING_POLYGON_MODE, polygon_mode);
       VIDCore->SetSettingValue(VDP_SETTING_UPSCALMODE, upscale_mode);
       VIDCore->SetSettingValue(VDP_SETTING_SCANLINE, scanlines);
    }
