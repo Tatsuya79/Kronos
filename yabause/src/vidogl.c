@@ -4007,6 +4007,8 @@ void VIDOGLVdp1Draw()
 
   FrameProfileAdd("Vdp1Command start");
 
+  _Ygl->needVdp1Render = 1;
+
   YglTmPull(YglTM_vdp1[_Ygl->drawframe], 0);
 
   maxpri = 0x00;
@@ -4159,6 +4161,200 @@ void VIDOGLVdp1Draw()
 #define IS_HALF_LUMINANCE(a)   ((a&0x03)==0x02)
 #define IS_REPLACE_OR_HALF_TRANSPARENT(a) ((a&0x03)==0x03)
 
+
+//////////////////////////////////////////////////////////////////////////////
+
+#if 0
+static int expandVertices(float* in, float* out)
+{
+  int isSquare =1;
+  int i;
+  int dst = 1;
+
+  for (i = 0; i<8; i++) {
+    out[0] = in[0];
+    out[1] = in[1];
+    out[2] = in[0];
+    out[3] = in[1];
+    out[4] = in[0];
+    out[5] = in[1];
+    out[6] = in[0];
+    out[7] = in[1];
+  }
+
+  for (i = 0; i < 3; i++) {
+    float dx = in[((i + 1) << 1) + 0] - in[((i + 0) << 1) + 0];
+    float dy = in[((i + 1) << 1) + 1] - in[((i + 0) << 1) + 1];
+    if ((dx <= 1.0f && dx >= -1.0f) && (dy <= 1.0f && dy >= -1.0f)) {
+      isSquare = 0;
+      break;
+    }
+
+    float d2x = in[(((i + 2) & 0x3) << 1) + 0] - in[((i + 1) << 1) + 0];
+    float d2y = in[(((i + 2) & 0x3) << 1) + 1] - in[((i + 1) << 1) + 1];
+    if ((d2x <= 1.0f && d2x >= -1.0f) && (d2y <= 1.0f && d2y >= -1.0f)) {
+      isSquare = 0;
+      break;
+    }
+
+    float dot = dx*d2x + dy*d2y;
+    if (dot > EPSILON || dot < -EPSILON) {
+      isSquare = 0;
+      break;
+    }
+  }
+  if (isSquare) {
+    float minx;
+    float miny;
+    int lt_index;
+
+    dst = 0;
+
+    // find upper left opsition
+    minx = 65535.0f;
+    miny = 65535.0f;
+    lt_index = -1;
+    for (i = 0; i < 4; i++) {
+      if (in[(i << 1) + 0] <= minx && in[(i << 1) + 1] <= miny) {
+        minx = in[(i << 1) + 0];
+        miny = in[(i << 1) + 1];
+        lt_index = i;
+      }
+    }
+    for (i = 0; i < 4; i++) {
+      if (i != lt_index) {
+        float nx;
+        float ny;
+        // vectorize
+        float dx = in[(i << 1) + 0] - in[((lt_index) << 1) + 0];
+        float dy = in[(i << 1) + 1] - in[((lt_index) << 1) + 1];
+
+        // normalize
+        float len = fabsf(sqrtf(dx*dx + dy*dy));
+        if (len <= EPSILON) {
+          continue;
+        }
+        nx = dx / len;
+        ny = dy / len;
+        if (nx >= EPSILON) nx = 1.0f; else nx = 0.0f;
+        if (ny >= EPSILON) ny = 1.0f; else ny = 0.0f;
+
+        // expand vertex
+        out[(i << 1) + 0] += nx;
+        out[(i << 1) + 1] += ny;
+      }
+    }
+  }
+  return dst;
+}
+#else
+static int expandVertices(float* in, float* out)
+{
+//Need to find lines
+//Test on breakpoint
+  int i, j;
+  int dst = 0;
+  int isTriangle = 0;
+  int isPoint = 1;
+  int isQuad = 1;
+  int isLine = 0;
+  for (i = 0; i<4; i++) {
+    if (in[(((i+0)%4) << 1) + 0] != in[(((i+1)%4) << 1) + 0]) isPoint = 0;
+    if (in[(((i+0)%4) << 1) + 1] != in[(((i+1)%4) << 1) + 1]) isPoint = 0;
+    for (j=i+1; j<4; j++) {
+      if ((in[i*2] == in[j*2]) && (in[i*2+1] == in[j*2+1])) {
+        if (isTriangle) isLine = 1;
+        isTriangle = 1;
+      }
+    }
+  }
+  if (isPoint) {
+    isTriangle = 0;
+    isLine = 0;
+    isQuad = 0;
+  }
+  if (isLine) {
+    isTriangle = 0;
+    isQuad = 0;
+  }
+  if(isTriangle) {
+    isQuad = 0;
+  }
+
+  if (isTriangle) {
+    float vert[6];
+    int i,j, idx = 1;
+    vert[0] = in[0];
+    vert[1] = in[1];
+    for (i = 1; i<4; i++) {
+      if (idx < 3) {
+        for (j = 0; j<idx; j++) {
+          if((vert[j*2] != in[i*2]) || (vert[j*2+1] != in[i*2+1])) {
+            vert[idx*2] = in[i*2];
+            vert[idx*2+1] = in[i*2+1];
+            idx++;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  if (isQuad || isTriangle) {
+    if (isQuad) dst = 1;
+//For triangle, we have to replace with quad
+    int disp = 0;
+    for (i = 0; i<4; i++) {
+      float nx = 0.5f;
+      float ny = 0.5f;
+      float dx1 = in[(((i+0)%4) << 1)] - in[(((i+3)%4) << 1)];
+      float dy1 = in[(((i+0)%4) << 1) + 1] - in[(((i+3)%4) << 1) + 1];
+
+      float dx2 = in[(((i+0)%4) << 1)] - in[(((i+1)%4) << 1)];
+      float dy2 = in[(((i+0)%4) << 1) + 1] - in[(((i+1)%4) << 1) + 1];
+
+      if ((dx1 + dx2) < 0.0) nx = -0.5f;
+      if ((dy1 + dy2) < 0.0) ny = -0.5f;
+
+      out[(((i+0)%4) << 1)] = in[(((i+0)%4) << 1)] + nx;
+      out[(((i+0)%4) << 1) + 1] = in[(((i+0)%4) << 1) + 1] + ny;
+    }
+#if 0
+    if (isQuad) {
+      int concav = 0;
+      float dx1 = in[0] - in[6] + in[0] - in[2];
+      float dy1 = in[1] - in[7] + in[1] - in[3];
+      float dx2 = in[4] - in[2] + in[4] - in[6];
+      float dy2 = in[5] - in[3] + in[5] - in[7];
+ 
+      concav |= ((dx1*dx2 + dy1*dy2) > 0);
+
+      dx1 = in[2] - in[0] + in[2] - in[4];
+      dy1 = in[3] - in[1] + in[3] - in[5];
+      dx2 = in[6] - in[4] + in[6] - in[0];
+      dy2 = in[7] - in[5] + in[7] - in[1];
+
+      concav |= ((dx1*dx2 + dy1*dy2) > 0);
+
+    if (concav == 1)
+      printf("Contact developer: Concav quad detected (%f, %f)(%f, %f)(%f, %f)(%f, %f)\n",in[0],in[1],in[2],in[3],in[4],in[5],in[6],in[7] );
+    }
+#endif
+  } else {
+    for (i = 0; i<8; i++) {
+      out[0] = in[0];
+      out[1] = in[1];
+      out[2] = in[0];
+      out[3] = in[1];
+      out[4] = in[0];
+      out[5] = in[1];
+      out[6] = in[0];
+      out[7] = in[1];
+    }
+  }
+  return dst;
+}
+#endif
 //////////////////////////////////////////////////////////////////////////////
 
 void VIDOGLVdp1NormalSpriteDraw(u8 * ram, Vdp1 * regs, u8* back_framebuffer)
@@ -4176,6 +4372,7 @@ void VIDOGLVdp1NormalSpriteDraw(u8 * ram, Vdp1 * regs, u8* back_framebuffer)
   short CMDXA;
   short CMDYA;
   Vdp2 *varVdp2Regs = &Vdp2Lines[0];
+  float vert[8];
 
 
   Vdp1ReadCommand(&cmd, Vdp1Regs->addr, Vdp1Ram);
@@ -4194,8 +4391,8 @@ void VIDOGLVdp1NormalSpriteDraw(u8 * ram, Vdp1 * regs, u8* back_framebuffer)
   if ((CMDXA & 0x400)) CMDXA |= 0xFC00; else CMDXA &= ~(0xFC00);
   if ((CMDYA & 0x400)) CMDYA |= 0xFC00; else CMDYA &= ~(0xFC00);
 
-  x = CMDXA + Vdp1Regs->localX;
-  y = CMDYA + Vdp1Regs->localY;
+  x = CMDXA;
+  y = CMDYA;
   sprite.w = ((cmd.CMDSIZE >> 8) & 0x3F) * 8;
   sprite.h = cmd.CMDSIZE & 0xFF;
   if (sprite.w == 0 || sprite.h == 0) {
@@ -4204,14 +4401,25 @@ void VIDOGLVdp1NormalSpriteDraw(u8 * ram, Vdp1 * regs, u8* back_framebuffer)
 
   sprite.flip = (cmd.CMDCTRL & 0x30) >> 4;
 
-  sprite.vertices[0] = (int)((float)x * vdp1wratio);
-  sprite.vertices[1] = (int)((float)y * vdp1hratio);
-  sprite.vertices[2] = (int)((float)(x + sprite.w) * vdp1wratio);
-  sprite.vertices[3] = (int)((float)y * vdp1hratio);
-  sprite.vertices[4] = (int)((float)(x + sprite.w) * vdp1wratio);
-  sprite.vertices[5] = (int)((float)(y + sprite.h) * vdp1hratio);
-  sprite.vertices[6] = (int)((float)x * vdp1wratio);
-  sprite.vertices[7] = (int)((float)(y + sprite.h) * vdp1hratio);
+  vert[0] = (float)x;
+  vert[1] = (float)y;
+  vert[2] = (float)(x + sprite.w);
+  vert[3] = (float)y;
+  vert[4] = (float)(x + sprite.w);
+  vert[5] = (float)(y + sprite.h);
+  vert[6] = (float)x;
+  vert[7] = (float)(y + sprite.h);
+
+  expandVertices(vert, sprite.vertices);
+
+  sprite.vertices[0] = (sprite.vertices[0] + Vdp1Regs->localX) * vdp1wratio;
+  sprite.vertices[1] = (sprite.vertices[1] + Vdp1Regs->localY) * vdp1hratio;
+  sprite.vertices[2] = (sprite.vertices[2] + Vdp1Regs->localX) * vdp1wratio;
+  sprite.vertices[3] = (sprite.vertices[3] + Vdp1Regs->localY) * vdp1hratio;
+  sprite.vertices[4] = (sprite.vertices[4] + Vdp1Regs->localX) * vdp1wratio;
+  sprite.vertices[5] = (sprite.vertices[5] + Vdp1Regs->localY) * vdp1hratio;
+  sprite.vertices[6] = (sprite.vertices[6] + Vdp1Regs->localX) * vdp1wratio;
+  sprite.vertices[7] = (sprite.vertices[7] + Vdp1Regs->localY) * vdp1hratio;
 
   tmp = cmd.CMDSRCA;
   tmp <<= 16;
@@ -4310,6 +4518,7 @@ void VIDOGLVdp1ScaledSpriteDraw(u8 * ram, Vdp1 * regs, u8* back_framebuffer)
   u16 CMDPMOD;
   u16 color2;
   float col[4 * 4];
+  float vert[8];
   int i;
   Vdp2 *varVdp2Regs = &Vdp2Lines[0];
 
@@ -4409,14 +4618,25 @@ void VIDOGLVdp1ScaledSpriteDraw(u8 * ram, Vdp1 * regs, u8* back_framebuffer)
   default: break;
   }
 
-  sprite.vertices[0] = (int)((float)x * vdp1wratio);
-  sprite.vertices[1] = (int)((float)y * vdp1hratio);
-  sprite.vertices[2] = (int)((float)(x + rw) * vdp1wratio);
-  sprite.vertices[3] = (int)((float)y * vdp1hratio);
-  sprite.vertices[4] = (int)((float)(x + rw) * vdp1wratio);
-  sprite.vertices[5] = (int)((float)(y + rh) * vdp1hratio);
-  sprite.vertices[6] = (int)((float)x * vdp1wratio);
-  sprite.vertices[7] = (int)((float)(y + rh) * vdp1hratio);
+  vert[0] = (float)x;
+  vert[1] = (float)y;
+  vert[2] = (float)(x + rw);
+  vert[3] = (float)y;
+  vert[4] = (float)(x + rw);
+  vert[5] = (float)(y + rh);
+  vert[6] = (float)x;
+  vert[7] = (float)(y + rh);
+
+  expandVertices(vert, sprite.vertices);
+
+  sprite.vertices[0] = (sprite.vertices[0]) * vdp1wratio;
+  sprite.vertices[1] = (sprite.vertices[1]) * vdp1hratio;
+  sprite.vertices[2] = (sprite.vertices[2]) * vdp1wratio;
+  sprite.vertices[3] = (sprite.vertices[3]) * vdp1hratio;
+  sprite.vertices[4] = (sprite.vertices[4]) * vdp1wratio;
+  sprite.vertices[5] = (sprite.vertices[5]) * vdp1hratio;
+  sprite.vertices[6] = (sprite.vertices[6]) * vdp1wratio;
+  sprite.vertices[7] = (sprite.vertices[7]) * vdp1hratio;
 
   tmp = cmd.CMDSRCA;
   tmp <<= 16;
@@ -4513,6 +4733,7 @@ void VIDOGLVdp1ScaledSpriteDraw(u8 * ram, Vdp1 * regs, u8* back_framebuffer)
 
 }
 
+
 //////////////////////////////////////////////////////////////////////////////
 
 void VIDOGLVdp1DistortedSpriteDraw(u8 * ram, Vdp1 * regs, u8* back_framebuffer)
@@ -4524,10 +4745,13 @@ void VIDOGLVdp1DistortedSpriteDraw(u8 * ram, Vdp1 * regs, u8* back_framebuffer)
   u64 tmp;
   u16 CMDPMOD;
   u16 color2;
-  int i;
+  int i,j;
   float col[4 * 4];
-  int isSquare;
+  int isTriangle = 0;
+  int isPoint = 1;
+  int isQuad = 1;
   Vdp2 *varVdp2Regs = &Vdp2Lines[0];
+  float vert[8];
 
   Vdp1ReadCommand(&cmd, Vdp1Regs->addr, Vdp1Ram);
   if (cmd.CMDSIZE == 0) {
@@ -4536,7 +4760,6 @@ void VIDOGLVdp1DistortedSpriteDraw(u8 * ram, Vdp1 * regs, u8* back_framebuffer)
 
   sprite.blendmode = VDP1_COLOR_CL_REPLACE;
   sprite.linescreen = 0;
-  sprite.dst = 1;
   sprite.w = ((cmd.CMDSIZE >> 8) & 0x3F) * 8;
   sprite.h = cmd.CMDSIZE & 0xFF;
   sprite.cor = 0;
@@ -4561,103 +4784,16 @@ void VIDOGLVdp1DistortedSpriteDraw(u8 * ram, Vdp1 * regs, u8* back_framebuffer)
   if ((cmd.CMDXB & 0x400)) cmd.CMDXB |= 0xFC00; else cmd.CMDXB &= ~(0xFC00);
   if ((cmd.CMDXD & 0x400)) cmd.CMDXD |= 0xFC00; else cmd.CMDXD &= ~(0xFC00);
 
-  sprite.vertices[0] = (s16)cmd.CMDXA;
-  sprite.vertices[1] = (s16)cmd.CMDYA;
-  sprite.vertices[2] = (s16)cmd.CMDXB;
-  sprite.vertices[3] = (s16)cmd.CMDYB;
-  sprite.vertices[4] = (s16)cmd.CMDXC;
-  sprite.vertices[5] = (s16)cmd.CMDYC;
-  sprite.vertices[6] = (s16)cmd.CMDXD;
-  sprite.vertices[7] = (s16)cmd.CMDYD;
-#if 0
-  isSquare = 0;
-#else
-  isSquare = 1;
+  vert[0] = (float)(s16)cmd.CMDXA;
+  vert[1] = (float)(s16)cmd.CMDYA;
+  vert[2] = (float)(s16)cmd.CMDXB;
+  vert[3] = (float)(s16)cmd.CMDYB;
+  vert[4] = (float)(s16)cmd.CMDXC;
+  vert[5] = (float)(s16)cmd.CMDYC;
+  vert[6] = (float)(s16)cmd.CMDXD;
+  vert[7] = (float)(s16)cmd.CMDYD;
 
-  for (i = 0; i < 3; i++) {
-    float dx = sprite.vertices[((i + 1) << 1) + 0] - sprite.vertices[((i + 0) << 1) + 0];
-    float dy = sprite.vertices[((i + 1) << 1) + 1] - sprite.vertices[((i + 0) << 1) + 1];
-    if ((dx <= 1.0f && dx >= -1.0f) && (dy <= 1.0f && dy >= -1.0f)) {
-      isSquare = 0;
-      break;
-    }
-
-    float d2x = sprite.vertices[(((i + 2) & 0x3) << 1) + 0] - sprite.vertices[((i + 1) << 1) + 0];
-    float d2y = sprite.vertices[(((i + 2) & 0x3) << 1) + 1] - sprite.vertices[((i + 1) << 1) + 1];
-    if ((d2x <= 1.0f && d2x >= -1.0f) && (d2y <= 1.0f && d2y >= -1.0f)) {
-      isSquare = 0;
-      break;
-    }
-
-    float dot = dx*d2x + dy*d2y;
-    if (dot > EPSILON || dot < -EPSILON) {
-      isSquare = 0;
-      break;
-    }
-  }
-
-  if (isSquare) {
-    float minx;
-    float miny;
-    int lt_index;
-
-    sprite.dst = 0;
-
-    // find upper left opsition
-    minx = 65535.0f;
-    miny = 65535.0f;
-    lt_index = -1;
-    for (i = 0; i < 4; i++) {
-      if (sprite.vertices[(i << 1) + 0] <= minx && sprite.vertices[(i << 1) + 1] <= miny) {
-        minx = sprite.vertices[(i << 1) + 0];
-        miny = sprite.vertices[(i << 1) + 1];
-        lt_index = i;
-      }
-    }
-
-    for (i = 0; i < 4; i++) {
-      if (i != lt_index) {
-        float nx;
-        float ny;
-        // vectorize
-        float dx = sprite.vertices[(i << 1) + 0] - sprite.vertices[((lt_index) << 1) + 0];
-        float dy = sprite.vertices[(i << 1) + 1] - sprite.vertices[((lt_index) << 1) + 1];
-
-        // normalize
-        float len = fabsf(sqrtf(dx*dx + dy*dy));
-        if (len <= EPSILON) {
-          continue;
-        }
-        nx = dx / len;
-        ny = dy / len;
-        if (nx >= EPSILON) nx = 1.0f; else nx = 0.0f;
-        if (ny >= EPSILON) ny = 1.0f; else ny = 0.0f;
-
-        // expand vertex
-        sprite.vertices[(i << 1) + 0] += nx;
-        sprite.vertices[(i << 1) + 1] += ny;
-      }
-    }
-  }
-#if 0
-  // Line Polygon
-  if ((sprite.vertices[1] == sprite.vertices[3]) &&
-    (sprite.vertices[3] == sprite.vertices[5]) &&
-    (sprite.vertices[5] == sprite.vertices[7])) {
-    sprite.vertices[5] += 1;
-    sprite.vertices[7] += 1;
-    isSquare = 1;
-  }
-  // Line Polygon
-  if ((sprite.vertices[0] == sprite.vertices[2]) &&
-    (sprite.vertices[2] == sprite.vertices[4]) &&
-    (sprite.vertices[4] == sprite.vertices[6])) {
-    sprite.vertices[4] += 1;
-    sprite.vertices[6] += 1;
-    isSquare = 1;
-  }
-#endif
-#endif
+  sprite.dst = expandVertices(vert, sprite.vertices);
 
   sprite.vertices[0] = (sprite.vertices[0] + Vdp1Regs->localX) * vdp1wratio;
   sprite.vertices[1] = (sprite.vertices[1] + Vdp1Regs->localY) * vdp1hratio;
@@ -4754,7 +4890,7 @@ void VIDOGLVdp1DistortedSpriteDraw(u8 * ram, Vdp1 * regs, u8* back_framebuffer)
 
 
 static void  makeLinePolygon(s16 *v1, s16 *v2, float *outv) {
-#define THICK 0.25f
+#define THICK 0.5f
   float dx;
   float dy;
   float len;
@@ -4869,6 +5005,7 @@ void VIDOGLVdp1PolygonDraw(u8 * ram, Vdp1 * regs, u8* back_framebuffer)
   int isSquare = 0;
   int shadow = 0;
   int normalshadow = 0;
+  float vert[8];
   int colorcalc = 0;
   vdp1cmd_struct cmd;
   float line_polygon[8];
@@ -4885,86 +5022,16 @@ void VIDOGLVdp1PolygonDraw(u8 * ram, Vdp1 * regs, u8* back_framebuffer)
   sprite.blendmode = VDP1_COLOR_CL_REPLACE;
   sprite.dst = 0;
 
-  sprite.vertices[0] = (s16)cmd.CMDXA;
-  sprite.vertices[1] = (s16)cmd.CMDYA;
-  sprite.vertices[2] = (s16)cmd.CMDXB;
-  sprite.vertices[3] = (s16)cmd.CMDYB;
-  sprite.vertices[4] = (s16)cmd.CMDXC;
-  sprite.vertices[5] = (s16)cmd.CMDYC;
-  sprite.vertices[6] = (s16)cmd.CMDXD;
-  sprite.vertices[7] = (s16)cmd.CMDYD;
+  vert[0] = (float)(s16)cmd.CMDXA;
+  vert[1] = (float)(s16)cmd.CMDYA;
+  vert[2] = (float)(s16)cmd.CMDXB;
+  vert[3] = (float)(s16)cmd.CMDYB;
+  vert[4] = (float)(s16)cmd.CMDXC;
+  vert[5] = (float)(s16)cmd.CMDYC;
+  vert[6] = (float)(s16)cmd.CMDXD;
+  vert[7] = (float)(s16)cmd.CMDYD;
 
-  isSquare = 1;
-
-  for (i = 0; i < 3; i++) {
-    float dx = sprite.vertices[((i + 1) << 1) + 0] - sprite.vertices[((i + 0) << 1) + 0];
-    float dy = sprite.vertices[((i + 1) << 1) + 1] - sprite.vertices[((i + 0) << 1) + 1];
-    float d2x = sprite.vertices[(((i + 2) & 0x3) << 1) + 0] - sprite.vertices[((i + 1) << 1) + 0];
-    float d2y = sprite.vertices[(((i + 2) & 0x3) << 1) + 1] - sprite.vertices[((i + 1) << 1) + 1];
-
-    float dot = dx*d2x + dy*d2y;
-    if (dot >= EPSILON || dot <= -EPSILON) {
-      isSquare = 0;
-      break;
-    }
-  }
-
-  // For gungiliffon big polygon
-  if (sprite.vertices[2] - sprite.vertices[0] > 350) {
-    isSquare = 1;
-  }
-
-  if (isSquare) {
-    // find upper left opsition
-    float minx = 65535.0f;
-    float miny = 65535.0f;
-    int lt_index = -1;
-
-    sprite.dst = 0;
-
-    for (i = 0; i < 4; i++) {
-      if (sprite.vertices[(i << 1) + 0] <= minx /*&& sprite.vertices[(i << 1) + 1] <= miny*/) {
-
-        if (minx == sprite.vertices[(i << 1) + 0]) {
-          if (sprite.vertices[(i << 1) + 1] < miny) {
-            minx = sprite.vertices[(i << 1) + 0];
-            miny = sprite.vertices[(i << 1) + 1];
-            lt_index = i;
-          }
-        }
-        else {
-          minx = sprite.vertices[(i << 1) + 0];
-          miny = sprite.vertices[(i << 1) + 1];
-          lt_index = i;
-        }
-      }
-    }
-
-    float adx = sprite.vertices[(((lt_index + 1) & 0x03) << 1) + 0] - sprite.vertices[((lt_index) << 1) + 0];
-    float ady = sprite.vertices[(((lt_index + 1) & 0x03) << 1) + 1] - sprite.vertices[((lt_index) << 1) + 1];
-    float bdx = sprite.vertices[(((lt_index + 2) & 0x03) << 1) + 0] - sprite.vertices[((lt_index) << 1) + 0];
-    float bdy = sprite.vertices[(((lt_index + 2) & 0x03) << 1) + 1] - sprite.vertices[((lt_index) << 1) + 1];
-    float cross = (adx * bdy) - (bdx * ady);
-
-    // clockwise
-    if (cross >= 0) {
-      sprite.vertices[(((lt_index + 1) & 0x03) << 1) + 0] += 1;
-      sprite.vertices[(((lt_index + 1) & 0x03) << 1) + 1] += 0;
-      sprite.vertices[(((lt_index + 2) & 0x03) << 1) + 0] += 1;
-      sprite.vertices[(((lt_index + 2) & 0x03) << 1) + 1] += 1;
-      sprite.vertices[(((lt_index + 3) & 0x03) << 1) + 0] += 0;
-      sprite.vertices[(((lt_index + 3) & 0x03) << 1) + 1] += 1;
-    }
-    // counter-clockwise
-    else {
-      sprite.vertices[(((lt_index + 1) & 0x03) << 1) + 0] += 0;
-      sprite.vertices[(((lt_index + 1) & 0x03) << 1) + 1] += 1;
-      sprite.vertices[(((lt_index + 2) & 0x03) << 1) + 0] += 1;
-      sprite.vertices[(((lt_index + 2) & 0x03) << 1) + 1] += 1;
-      sprite.vertices[(((lt_index + 3) & 0x03) << 1) + 0] += 1;
-      sprite.vertices[(((lt_index + 3) & 0x03) << 1) + 1] += 0;
-    }
-  }
+  expandVertices(vert, sprite.vertices);
 
   sprite.vertices[0] = (sprite.vertices[0] + Vdp1Regs->localX) * vdp1wratio;
   sprite.vertices[1] = (sprite.vertices[1] + Vdp1Regs->localY) * vdp1hratio;
@@ -7808,12 +7875,18 @@ void VIDOGLSetSettingValueMode(int type, int value) {
     _Ygl->upmode = value;
     int maxWidth = (GlWidth*3 > GlHeight*4)?GlHeight*4/3:GlWidth;
     int maxHeight = (GlWidth*3 > GlHeight*4)?GlHeight:GlWidth*3/4;
-    if ((_Ygl->width >= maxWidth) || (_Ygl->height >= maxHeight)) _Ygl->upmode = UP_NONE;
+    //if ((_Ygl->width >= maxWidth) || (_Ygl->height >= maxHeight)) _Ygl->upmode = UP_NONE;
     break;
   case VDP_SETTING_RESOLUTION_MODE:
     _Ygl->resolution_mode = value;
     SetSaturnResolution(vdp2width, vdp2height);
     break;
+  case VDP_SETTING_POLYGON_MODE:
+    if (value == GPU_TESSERATION && _Ygl->polygonmode != GPU_TESSERATION) {
+      YglTesserationProgramInit();
+    }
+    _Ygl->polygonmode = value;
+  break;
   case VDP_SETTING_ASPECT_RATIO:
     _Ygl->stretch = value;
   break;

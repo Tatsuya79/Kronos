@@ -1317,21 +1317,38 @@ static int YglCheckTriangle( const float * point ){
 
 static int YglTriangleGrowShading_in(YglSprite * input, YglTexture * output, float * colors, YglCache * c, int cash_flg, YglTextureManager *tm);
 static int YglQuadGrowShading_in(YglSprite * input, YglTexture * output, float * colors, YglCache * c, int cash_flg, YglTextureManager *tm);
+static int YglQuadGrowShading_tesselation_in(YglSprite * input, YglTexture * output, float * colors, YglCache * c, int cash_flg, YglTextureManager *tm);
 
 void YglCacheQuadGrowShading(YglSprite * input, float * colors, YglCache * cache, YglTextureManager *tm){
-    if (YglCheckTriangle(input->vertices)){
+    if (_Ygl->polygonmode == GPU_TESSERATION) {
+      YglQuadGrowShading_tesselation_in(input, NULL, colors, cache, 0, tm);
+    }
+    else if (_Ygl->polygonmode == CPU_TESSERATION) {
       YglTriangleGrowShading_in(input, NULL, colors, cache, 0, tm);
     }
-    else{
-      YglQuadGrowShading_in(input, NULL, colors, cache, 0, tm);
+    else if (_Ygl->polygonmode == PERSPECTIVE_CORRECTION) {
+      if (YglCheckTriangle(input->vertices)){
+        YglTriangleGrowShading_in(input, NULL, colors, cache, 0, tm);
+      }
+      else{
+        YglQuadGrowShading_in(input, NULL, colors, cache, 0, tm);
+      }
     }
 }
 
 int YglQuadGrowShading(YglSprite * input, YglTexture * output, float * colors, YglCache * c, YglTextureManager *tm){
-   if (YglCheckTriangle(input->vertices)){
-      return YglTriangleGrowShading_in(input, output, colors, c, 1, tm);
-   }
-   return YglQuadGrowShading_in(input, output, colors, c, 1,tm);
+  if (_Ygl->polygonmode == GPU_TESSERATION) {
+    return YglQuadGrowShading_tesselation_in(input, output, colors, c, 1, tm);
+  }
+  else if (_Ygl->polygonmode == CPU_TESSERATION) {
+    return YglTriangleGrowShading_in(input, output, colors, c, 1, tm);
+  }
+  else if (_Ygl->polygonmode == PERSPECTIVE_CORRECTION) {
+    if (YglCheckTriangle(input->vertices)){
+       return YglTriangleGrowShading_in(input, output, colors, c, 1, tm);
+    }
+    return YglQuadGrowShading_in(input, output, colors, c, 1,tm);
+  }
 }
 
 int YglTriangleGrowShading_in(YglSprite * input, YglTexture * output, float * colors, YglCache * c, int cash_flg, YglTextureManager *tm ) {
@@ -1788,6 +1805,141 @@ int YglQuadGrowShading_in(YglSprite * input, YglTexture * output, float * colors
 
    return 0;
 }
+
+int YglQuadGrowShading_tesselation_in(YglSprite * input, YglTexture * output, float * colors, YglCache * c, int cash_flg, YglTextureManager *tm) {
+  unsigned int x, y;
+  YglProgram *program;
+  texturecoordinate_struct *tmp;
+  float * vtxa;
+  int prg = PG_VFP1_GOURAUDSAHDING_TESS;
+  float * pos;
+
+  if (input->blendmode == VDP1_COLOR_CL_GROW_HALF_TRANSPARENT)
+  {
+    prg = PG_VFP1_GOURAUDSAHDING_HALFTRANS_TESS;
+  }
+  else if (input->blendmode == VDP1_COLOR_CL_MESH)
+  {
+    prg = PG_VFP1_MESH_TESS;
+  }
+  else if (input->blendmode == VDP1_COLOR_CL_SHADOW){
+    prg = PG_VFP1_SHADOW_TESS;
+  }
+  else if (input->blendmode == VDP1_COLOR_SPD){
+    prg = PG_VFP1_GOURAUDSAHDING_SPD_TESS;
+  }
+
+  program = YglGetProgram(input, prg, tm);
+  if (program == NULL) return -1;
+  //YGLLOG( "program->quads = %X,%X,%d/%d\n",program->quads,program->vertexBuffer,program->currentQuad,program->maxQuad );
+  if (program->quads == NULL) {
+    int a = 0;
+  }
+
+  program->color_offset_val[0] = (float)(input->cor) / 255.0f;
+  program->color_offset_val[1] = (float)(input->cog) / 255.0f;
+  program->color_offset_val[2] = (float)(input->cob) / 255.0f;
+  program->color_offset_val[3] = 0.0;
+
+  if (output != NULL){
+    YglTMAllocate(tm, output, input->w, input->h, &x, &y);
+  }
+  else{
+    x = c->x;
+    y = c->y;
+  }
+
+  // Vertex
+  pos = program->quads + program->currentQuad;
+
+  pos[0] = input->vertices[0];
+  pos[1] = input->vertices[1];
+  pos[2] = input->vertices[2];
+  pos[3] = input->vertices[3];
+  pos[4] = input->vertices[4];
+  pos[5] = input->vertices[5];
+  pos[6] = input->vertices[6];
+  pos[7] = input->vertices[7];
+
+
+  // Color
+  vtxa = (program->vertexAttribute + (program->currentQuad * 2));
+  if (colors == NULL) {
+    memset(vtxa, 0, sizeof(float) * 24);
+  }
+  else {
+    vtxa[0] = colors[0];
+    vtxa[1] = colors[1];
+    vtxa[2] = colors[2];
+    vtxa[3] = colors[3];
+
+    vtxa[4] = colors[4];
+    vtxa[5] = colors[5];
+    vtxa[6] = colors[6];
+    vtxa[7] = colors[7];
+
+    vtxa[8] = colors[8];
+    vtxa[9] = colors[9];
+    vtxa[10] = colors[10];
+    vtxa[11] = colors[11];
+
+    vtxa[12] = colors[12];
+    vtxa[13] = colors[13];
+    vtxa[14] = colors[14];
+    vtxa[15] = colors[15];
+  }
+
+  // texture
+  tmp = (texturecoordinate_struct *)(program->textcoords + (program->currentQuad * 2));
+
+  program->currentQuad += 8;
+
+  tmp[0].r = tmp[1].r = tmp[2].r = tmp[3].r = 0.0f; // these can stay at 0.0
+  tmp[0].q = tmp[1].q = tmp[2].q = tmp[3].q = 1.0f; // these can stay at 1.0
+
+  if ( input->flip & 0x1) {
+    tmp[0].s = tmp[3].s = (float)((x + input->w) - ATLAS_BIAS);
+    tmp[1].s = tmp[2].s = (float)((x)+ATLAS_BIAS);
+  }
+  else {
+    tmp[0].s = tmp[3].s = (float)((x)+ATLAS_BIAS);
+    tmp[1].s = tmp[2].s = (float)((x + input->w) - ATLAS_BIAS);
+  }
+  if( input->flip & 0x2) {
+    tmp[0].t = tmp[1].t = (float)((y + input->h) - ATLAS_BIAS);
+    tmp[2].t = tmp[3].t = (float)((y)+ATLAS_BIAS);
+  }
+  else {
+    tmp[0].t = tmp[1].t = (float)((y)+ATLAS_BIAS);
+    tmp[2].t = tmp[3].t = (float)((y + input->h) - ATLAS_BIAS);
+  }
+
+  if (c != NULL && cash_flg == 1)
+  {
+    switch (input->flip) {
+    case 0:
+      c->x = tmp[0].s;
+      c->y = tmp[0].t;
+      break;
+    case 1:
+      c->x = tmp[1].s;
+      c->y = tmp[0].t;
+      break;
+    case 2:
+      c->x = tmp[0].s;
+      c->y = tmp[2].t;
+      break;
+    case 3:
+      c->x = tmp[1].s;
+      c->y = tmp[2].t;
+      break;
+    }
+  }
+
+
+  return 0;
+}
+
 
 static void YglQuadOffset_in(vdp2draw_struct * input, YglTexture * output, YglCache * c, int cx, int cy, float sx, float sy, int cash_flg, YglTextureManager *tm);
 
@@ -2372,12 +2524,15 @@ static void waitVdp1End(int id) {
 }
 
 static void executeTMVDP1(int in, int out) {
-  YglTmPush(YglTM_vdp1[in]);
-  YglRenderVDP1();
-  _Ygl->syncVdp1[in] = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE,0);
-  waitVdp1End(out);
-  YglReset(_Ygl->vdp1levels[out]);
-  YglTmPull(YglTM_vdp1[out], 0);
+  if (_Ygl->needVdp1Render != 0){
+    YglTmPush(YglTM_vdp1[in]);
+    YglRenderVDP1();
+    _Ygl->syncVdp1[in] = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE,0);
+    waitVdp1End(out);
+    YglReset(_Ygl->vdp1levels[out]);
+    YglTmPull(YglTM_vdp1[out], 0);
+    _Ygl->needVdp1Render = 0;
+  }
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -2473,7 +2628,12 @@ void YglRenderVDP1(void) {
       if( level->prg[j].vaid != 0 ) {
         glVertexAttribPointer(level->prg[j].vaid,4, GL_FLOAT, GL_FALSE, 0, level->prg[j].vertexAttribute);
       }
-      glDrawArrays(GL_TRIANGLES, 0, level->prg[j].currentQuad / 2);
+      if ( level->prg[j].prgid >= PG_VFP1_GOURAUDSAHDING_TESS ) {
+        if (glPatchParameteri) glPatchParameteri(GL_PATCH_VERTICES, 4);
+        glDrawArrays(GL_PATCHES, 0, level->prg[j].currentQuad / 2);
+      }else{
+        glDrawArrays(GL_TRIANGLES, 0, level->prg[j].currentQuad / 2);
+      }
       level->prg[j].currentQuad = 0;
     }
     if( level->prg[j].cleanupUniform ){
@@ -2626,8 +2786,8 @@ void YglUpdateVdp2Reg(Vdp2 *varVdp2Regs) {
 
 void YglRenderFrameBuffer(int from, int to, Vdp2* varVdp2Regs) {
 
-  GLfloat   vertices[12];
-  GLfloat texcord[12];
+  GLfloat vertices[8];
+  GLfloat texcord[8];
   float offsetcol[4];
   int bwin0, bwin1, logwin0, logwin1, winmode;
   int is_addcolor = 0;
@@ -2678,33 +2838,23 @@ void YglRenderFrameBuffer(int from, int to, Vdp2* varVdp2Regs) {
   }
 
    // render
-   vertices[0] = 0.0f;
+   vertices[0] = cwidth;
    vertices[1] = 0.0f;
-   vertices[2] = cwidth;
+   vertices[2] = 0.0f;
    vertices[3] = 0.0f;
    vertices[4] = cwidth;
    vertices[5] = cheight;
-
    vertices[6] = 0.0f;
-   vertices[7] = 0.0f;
-   vertices[8] = cwidth;
-   vertices[9] = cheight;
-   vertices[10] = 0.0f;
-   vertices[11] = cheight;
+   vertices[7] = cheight;
 
-   texcord[0] = 0.0f;
+   texcord[0] = 1.0f;
    texcord[1] = 1.0f;
-   texcord[2] = 1.0f;
+   texcord[2] = 0.0f;
    texcord[3] = 1.0f;
    texcord[4] = 1.0f;
    texcord[5] = 0.0f;
-
    texcord[6] = 0.0f;
-   texcord[7] = 1.0f;
-   texcord[8] = 1.0f;
-   texcord[9] = 0.0f;
-   texcord[10] = 0.0f;
-   texcord[11] = 0.0f;
+   texcord[7] = 0.0f;
 
    // Window Mode
    bwin0 = (Vdp2Regs->WCTLC >> 9) &0x01;
@@ -2778,7 +2928,7 @@ void YglRenderFrameBuffer(int from, int to, Vdp2* varVdp2Regs) {
      glUniformMatrix4fv(_Ygl->renderfb.mtxModelView, 1, GL_FALSE, (GLfloat*)&result.m[0][0]);
      glVertexAttribPointer(_Ygl->renderfb.vertexp, 2, GL_FLOAT, GL_FALSE, 0, (GLvoid *)vertices);
      glVertexAttribPointer(_Ygl->renderfb.texcoordp, 2, GL_FLOAT, GL_FALSE, 0, (GLvoid *)texcord);
-     glDrawArrays(GL_TRIANGLES, 0, 6);
+     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
      glDepthFunc(GL_GREATER);
      glDisable(GL_BLEND);
@@ -2847,7 +2997,7 @@ void YglRenderFrameBuffer(int from, int to, Vdp2* varVdp2Regs) {
      glUniformMatrix4fv(_Ygl->renderfb.mtxModelView, 1, GL_FALSE, (GLfloat*)&result.m[0][0]);
      glVertexAttribPointer(_Ygl->renderfb.vertexp, 2, GL_FLOAT, GL_FALSE, 0, (GLvoid *)vertices);
      glVertexAttribPointer(_Ygl->renderfb.texcoordp, 2, GL_FLOAT, GL_FALSE, 0, (GLvoid *)texcord);
-     glDrawArrays(GL_TRIANGLES, 0, 6);
+     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
      glDepthFunc(GL_GEQUAL);
      glEnable(GL_BLEND);
@@ -2917,7 +3067,7 @@ void YglRenderFrameBuffer(int from, int to, Vdp2* varVdp2Regs) {
    glUniformMatrix4fv(_Ygl->renderfb.mtxModelView, 1, GL_FALSE, (GLfloat*)&result.m[0][0]);
    glVertexAttribPointer(_Ygl->renderfb.vertexp,2,GL_FLOAT, GL_FALSE,0,(GLvoid *)vertices );
    glVertexAttribPointer(_Ygl->renderfb.texcoordp,2,GL_FLOAT,GL_FALSE,0,(GLvoid *)texcord );
-   glDrawArrays(GL_TRIANGLES, 0, 6);
+   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
 #if 0
    if (is_addcolor == 1){
@@ -2940,8 +3090,8 @@ void YglRenderFrameBuffer(int from, int to, Vdp2* varVdp2Regs) {
 
 void YglRenderFrameBufferShadow() {
 
-  GLint   vertices[12];
-  GLfloat texcord[12];
+  GLfloat vertices[8];
+  GLfloat texcord[8];
   float offsetcol[4];
   int bwin0, bwin1, logwin0, logwin1, winmode;
   int is_addcolor = 0;
@@ -2969,37 +3119,28 @@ void YglRenderFrameBufferShadow() {
   }
 
   // render
-  vertices[0] = 0 - 0.5;
+  vertices[0] = _Ygl->rwidth + 1 - 0.5;
   vertices[1] = 0 - 0.5;
-  vertices[2] = _Ygl->rwidth + 1 - 0.5;
+  vertices[2] = 0 - 0.5;
   vertices[3] = 0 - 0.5;
   vertices[4] = _Ygl->rwidth + 1 - 0.5;
   vertices[5] = _Ygl->rheight + 1 - 0.5;
-
   vertices[6] = 0 - 0.5;
-  vertices[7] = 0 - 0.5;
-  vertices[8] = _Ygl->rwidth + 1 - 0.5;
-  vertices[9] = _Ygl->rheight + 1 - 0.5;
-  vertices[10] = 0 - 0.5;
-  vertices[11] = _Ygl->rheight + 1 - 0.5;
+  vertices[7] = _Ygl->rheight + 1 - 0.5;
 
-  texcord[0] = 0.0f;
+  texcord[0] = 1.0f;
   texcord[1] = 1.0f;
-  texcord[2] = 1.0f;
+  texcord[2] = 0.0f;
   texcord[3] = 1.0f;
   texcord[4] = 1.0f;
   texcord[5] = 0.0f;
-
   texcord[6] = 0.0f;
-  texcord[7] = 1.0f;
-  texcord[8] = 1.0f;
-  texcord[9] = 0.0f;
-  texcord[10] = 0.0f;
-  texcord[11] = 0.0f;
+  texcord[7] = 0.0f;
+
   glUniformMatrix4fv(_Ygl->renderfb.mtxModelView, 1, GL_FALSE, (GLfloat*)&result.m[0][0]);
-  glVertexAttribPointer(_Ygl->renderfb.vertexp, 2, GL_INT, GL_FALSE, 0, (GLvoid *)vertices);
+  glVertexAttribPointer(_Ygl->renderfb.vertexp, 2, GL_FLOAT, GL_FALSE, 0, (GLvoid *)vertices);
   glVertexAttribPointer(_Ygl->renderfb.texcoordp, 2, GL_FLOAT, GL_FALSE, 0, (GLvoid *)texcord);
-  glDrawArrays(GL_TRIANGLES, 0, 6);
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
 
 
@@ -3926,6 +4067,9 @@ void YglChangeResolution(int w, int h) {
   _Ygl->height = h * _Ygl->resolution_mode;
 
   rebuild_frame_buffer = 1;
+
+  _Ygl->width &= ~1;
+  _Ygl->height &= ~1;
 
   _Ygl->rwidth = w;
   _Ygl->rheight = h;

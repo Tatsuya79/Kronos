@@ -140,15 +140,20 @@ unsigned long nextFrameTime = 0;
 static int autoframeskipenab=0;
 
 static void syncVideoMode(void) {
-  unsigned long sleep = 0;
   unsigned long now = YabauseGetTicks();
-  if (nextFrameTime == 0) nextFrameTime = YabauseGetTicks(); 
-  if(nextFrameTime > now)
-    sleep = ((nextFrameTime - now)*1000000.0)/yabsys.tickfreq;
-  else
-    nextFrameTime = now;
-  if (isAutoFrameSkip() == 0) YabThreadUSleep(sleep);
-  nextFrameTime  += yabsys.OneFrameTime;
+  if (nextFrameTime == 0) nextFrameTime = now; 
+  if (isAutoFrameSkip() == 0) {
+    if (now < nextFrameTime)  {
+      YabThreadUSleep(((nextFrameTime - now) * 1000000) / yabsys.tickfreq);
+    }
+    nextFrameTime += yabsys.OneFrameTime;
+  }
+
+
+}
+
+void resetSyncVideo(void) {
+  nextFrameTime = 0;
 }
 
 void YabauseChangeTiming(int freqtype) {
@@ -382,6 +387,7 @@ int YabauseInit(yabauseinit_struct *init)
    // Settings
    VideoSetSetting(VDP_SETTING_FILTERMODE,init->video_filter_type);
    VideoSetSetting(VDP_SETTING_UPSCALMODE,init->video_upscale_type);
+   VideoSetSetting(VDP_SETTING_POLYGON_MODE, init->polygon_generation_mode);
    VideoSetSetting(VDP_SETTING_RESOLUTION_MODE, init->resolution_mode);
    VideoSetSetting(VDP_SETTING_ASPECT_RATIO, init->stretch);
    VideoSetSetting(VDP_SETTING_SCANLINE, init->scanline);
@@ -594,6 +600,8 @@ void YabauseResetNoLoad(void) {
    Vdp1Reset();
    Vdp2Reset();
    SmpcReset();
+
+   nextFrameTime = 0;
 
    SH2PowerOn(MSH2);
 }
