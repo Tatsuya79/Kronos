@@ -392,6 +392,16 @@ static int PERLIBRETROHandleEvents(void)
             else
                PerKeyUp(PERJAMMA_P2_BUTTON4);
          }
+
+         if (input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2))
+            PerKeyDown(PERJAMMA_TEST);
+         else
+            PerKeyUp(PERJAMMA_TEST);
+
+         if (input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2))
+            PerKeyDown(PERJAMMA_SERVICE);
+         else
+            PerKeyUp(PERJAMMA_SERVICE);
       } else {
 
          int analog_left_x = 0;
@@ -1169,6 +1179,8 @@ bool retro_load_game(const struct retro_game_info *info)
          { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_X,      "Button 4" },
          { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_SELECT, "Coin" },
          { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START,  "Start" },
+         { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2,     "Test" },
+         { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2,     "Service" },
 
          { 1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT,   "D-Pad Left" },
          { 1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_UP,     "D-Pad Up" },
