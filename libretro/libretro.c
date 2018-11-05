@@ -121,6 +121,7 @@ void retro_set_environment(retro_environment_t cb)
       { "kronos_resolution_mode", "Resolution Mode; original|2x|4x|8x|16x" },
       { "kronos_polygon_mode", "Polygon Mode; perspective_correction|gpu_tesselation|cpu_tesselation" },
       { "kronos_scanlines", "Scanlines; disabled|enabled" },
+      { "kronos_service_enabled", "Service/Test Buttons; disabled|enabled" },
       { NULL, NULL },
    };
 
@@ -171,6 +172,7 @@ void retro_set_input_state(retro_input_state_t cb) { input_state_cb = cb; }
 static int pad_type[12] = {1,1,1,1,1,1,1,1,1,1,1,1};
 static unsigned players = 2;
 static bool multitap[2] = {0,0};
+static bool service_enabled = false;
 
 int PERLIBRETROInit(void)
 {
@@ -259,6 +261,19 @@ static int PERLIBRETROHandleEvents(void)
    unsigned i = 0;
 
    input_poll_cb();
+
+   if (stv_mode && service_enabled)
+   {
+      if (input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2))
+         PerKeyDown(PERJAMMA_TEST);
+      else
+         PerKeyUp(PERJAMMA_TEST);
+
+      if (input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2))
+         PerKeyDown(PERJAMMA_SERVICE);
+      else
+         PerKeyUp(PERJAMMA_SERVICE);
+   }
 
    for(i = 0; i < players; i++)
    {
@@ -392,16 +407,6 @@ static int PERLIBRETROHandleEvents(void)
             else
                PerKeyUp(PERJAMMA_P2_BUTTON4);
          }
-
-         if (input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2))
-            PerKeyDown(PERJAMMA_TEST);
-         else
-            PerKeyUp(PERJAMMA_TEST);
-
-         if (input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2))
-            PerKeyDown(PERJAMMA_SERVICE);
-         else
-            PerKeyUp(PERJAMMA_SERVICE);
       } else {
 
          int analog_left_x = 0;
@@ -915,6 +920,15 @@ void check_variables(void)
          scanlines = 1;
    }
 
+   var.key = "kronos_service_enabled";
+   var.value = NULL;
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (strcmp(var.value, "enabled") == 0)
+         service_enabled = true;
+      else
+         service_enabled = false;
+   }
 }
 
 void retro_get_system_av_info(struct retro_system_av_info *info)
